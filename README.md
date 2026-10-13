@@ -1,6 +1,6 @@
-# Class of [Year] Legacy
+# Class of 2003 Legacy
 
-The year group's platform for the six-unit classroom block: members and houses, contributions, the house competition, financial controls, construction tracking, secret-ballot voting, an audit trail and the legacy archive. It is built to **Implementation Specification v1.1**.
+The legacy platform of the **Presbyterian Boys' Secondary School (PRESEC), Legon — Ɔdadeɛ 2003 year group**. The year group owns it. Its first legacy project is a six-unit classroom block, given by the year group to the PRESEC Legon campus, and the platform is built to carry later projects too. It covers classmates and their houses (PRESEC's eight original houses: Kwansa, Clerk, Engmann, Akro, Riis, Labone, Ako-Adjei and Owusu-Parry), contributions, the house competition, financial controls, construction tracking, secret-ballot voting, an audit trail and the legacy archive. It is built to **Implementation Specification v1.1**.
 
 | Layer | Technology |
 |---|---|
@@ -24,15 +24,15 @@ Sample accounts (development only), all with the password `Legacy-demo-2026`:
 
 | Email | Role |
 |---|---|
-| ama@classlegacy.test | General member |
-| kofi@classlegacy.test | Treasurer |
-| efua@classlegacy.test | Finance approver (has a declared conflict with the QS firm) |
-| yaw@classlegacy.test | Independent reviewer |
-| nana@classlegacy.test | Project manager |
-| abena@classlegacy.test | House captain (Nkrumah) |
-| kwame@classlegacy.test | Platform administrator |
-| akosua@classlegacy.test | Executive committee chair |
-| gifty@classlegacy.test | School representative |
+| ama@presec2003.test | General member |
+| kofi@presec2003.test | Treasurer |
+| efua@presec2003.test | Finance approver (has a declared conflict with the QS firm) |
+| yaw@presec2003.test | Independent reviewer |
+| nana@presec2003.test | Project manager |
+| abena@presec2003.test | House captain (Clerk House) |
+| kwame@presec2003.test | Platform administrator |
+| akosua@presec2003.test | Executive committee chair |
+| gifty@presec2003.test | School representative |
 
 Every person, firm, house name, figure and exchange rate in the seed is **sample data**.
 
@@ -84,7 +84,7 @@ docker build -t class-legacy .
 # migrate, then bootstrap ONCE on an empty database:
 docker run --rm -e DATABASE_URL=... class-legacy node server/dist/migrate-cli.js
 docker run --rm -e DATABASE_URL=... -e ADMIN_EMAIL=... -e ADMIN_PASSWORD=... -e ADMIN_NAME=... \
-  -e HOUSES="H1:Official name,H2:...,H3:...,H4:..." -e PROJECT_NAME="Six-unit classroom block" class-legacy node server/dist/bootstrap.js
+  -e HOUSES="H1:Kwansa,H2:Clerk,H3:Engmann,H4:Akro,H5:Riis,H6:Labone,H7:Ako-Adjei,H8:Owusu-Parry" -e PROJECT_NAME="Legacy Project 1: six-unit classroom block, PRESEC Legon" class-legacy node server/dist/bootstrap.js
 docker run -p 8080:8080 -e DATABASE_URL=... -e PAYMENT_WEBHOOK_SECRET=... -e WEB_ORIGIN=https://your.domain class-legacy
 ```
 
@@ -98,5 +98,5 @@ These items need decisions, accounts or professionals that a codebase cannot sup
 2. **Message delivery.** Notifications are stored with their channels (in-app, SMS, email). Connect an SMS and email provider to send them.
 3. **File uploads.** Receipts, site photos and drawings need private object storage with expiring links. Evidence is currently recorded as text references.
 4. **Admin set-up screens.** The API supports creating ballots and drafting rule versions, but the web app does not have screens for them yet. Entering the contract, budget baseline, work packages and the competition period currently happens by bootstrap/SQL.
-5. **Real configuration.** The year, school, logo, official house names, approval thresholds, quorum, fees, committee members and the legal custody details all need confirming (see the spec's decisions register).
+5. **Real configuration.** The year group (2003), school (PRESEC Legon), houses (the original eight) and site (PRESEC Legon campus) are set. Still to confirm: the logo, member numbering, approval thresholds, quorum, fees, committee members and the legal custody details all need confirming (see the spec's decisions register).
 6. **Security review and user testing (AC-16, AC-17).** Commission an independent penetration test and a data-protection review under Ghana's Data Protection Act. Run user acceptance testing with representative members on their own phones.

@@ -1,4 +1,4 @@
--- Class of [Year] Legacy — initial schema (spec v1.1)
+-- Class of 2003 Legacy — initial schema (spec v1.1)
 -- Money is stored as BIGINT pesewas (1 GHS = 100 pesewas). Never floats.
 -- Posted ledger lines and audit events are append-only (enforced by triggers).
 

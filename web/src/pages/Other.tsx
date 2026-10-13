@@ -27,7 +27,7 @@ export function Legacy() {
   const { can } = useSession();
   const l = useLoad<any>('/legacy');
   const act = useAction();
-  return <div className="stack"><div><div className="eyebrow">For the school and the classes after us</div><h1>Legacy archive</h1></div>
+  return <div className="stack"><div><div className="eyebrow">What the 2003 year group leaves to PRESEC</div><h1>Legacy archive</h1></div>
     <Gate error={l.error}>{l.data && <div className="grid-2">
       <div className="card"><div className="card-h"><h2>Handover checklist</h2></div>{l.data.handover.map((h: any) => <div className="li" key={h.id}><div className="grow">{h.title}{h.document_ref && <div className="muted small mono">{h.document_ref} · {date(h.received_on)}</div>}</div>
         {h.status === 'received' ? <Pill k="ok">Received</Pill> : can('proj.edit') ? <button className="btn sm" onClick={() => { const r = window.prompt?.('Document reference', ''); if (r) act(() => api.post(`/legacy/handover/${h.id}`, { documentRef: r }), 'Recorded.', l.reload); }}>Mark received</button> : <Pill>Pending</Pill>}</div>)}</div>

@@ -14,7 +14,7 @@ import { Audit, Legacy, Notifications } from './pages/Other';
 
 const NAV: [string, string, string?][] = [
   ['/', 'Home'], ['/money', 'Money'], ['/houses', 'Houses'], ['/project', 'Classroom project', 'proj.view'], ['/votes', 'Votes', 'vote'],
-  ['/members', 'Members', 'dir'], ['/legacy', 'Legacy archive', 'proj.view'], ['/notifications', 'Notifications'], ['/audit', 'Audit trail', 'audit.view'],
+  ['/members', 'Year group', 'dir'], ['/legacy', 'Legacy archive', 'proj.view'], ['/notifications', 'Notifications'], ['/audit', 'Audit trail', 'audit.view'],
 ];
 
 function Login() {
@@ -28,13 +28,13 @@ function Login() {
     finally { setBusy(false); }
   };
   return <div className="login"><form className="card stack" onSubmit={submit}>
-    <div className="row"><div className="seal">CY</div><div><h1 style={{ fontSize: '1.25rem' }}>Class of [Year] Legacy</h1><p className="muted small">Six-unit classroom block</p></div></div>
+    <div className="row"><div className="seal">03</div><div><h1 style={{ fontSize: '1.25rem' }}>Class of 2003 Legacy</h1><p className="muted small">PRESEC Legon · Ɔdadeɛ 2003 year group</p></div></div>
     <label className="f" htmlFor="em">Email<input id="em" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
     <label className="f" htmlFor="pw">Password<input id="pw" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
     {needCode && <label className="f" htmlFor="cd">Authenticator code<input id="cd" inputMode="numeric" pattern="\d{6}" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} /></label>}
     {err && <div className="callout bad">{err}</div>}
     <button className="btn primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
-    <p className="def">Development sample accounts: ama, kofi, efua, yaw, nana, abena, kwame, akosua, gifty @classlegacy.test · password Legacy-demo-2026</p>
+    <p className="def">Development sample accounts: ama, kofi, efua, yaw, nana, abena, kwame, akosua, gifty @presec2003.test · password Legacy-demo-2026</p>
   </form></div>;
 }
 
@@ -44,7 +44,7 @@ function Shell() {
   const items = NAV.filter(([, , p]) => !p || can(p));
   return <div className="app">
     <aside className="rail" aria-label="Main navigation">
-      <div className="brandmark"><div className="seal">CY</div><div><b>Class of [Year] Legacy</b><span>Six-unit classroom block</span></div></div>
+      <div className="brandmark"><div className="seal">03</div><div><b>Class of 2003 Legacy</b><span>PRESEC Legon · Ɔdadeɛ 2003</span></div></div>
       <nav className="nav">{items.map(([to, label]) => <NavLink key={to} to={to} end={to === '/'}>{label}</NavLink>)}</nav>
     </aside>
     <main className="main">

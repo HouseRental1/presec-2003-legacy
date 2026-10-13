@@ -11,20 +11,20 @@ afterAll(async () => { await app.close(); });
 describe('AC-01 accounts: register, confirm, suspend, roles', () => {
   it('only an administrator can register and confirm members', async () => {
     const kwame = await as(app, 'kwame'), ama = await as(app, 'ama');
-    const body = { fullName: 'Esi Quaye', memberNo: 'CY-0999', houseId: 'H3', email: 'esi@classlegacy.test', password: 'a-long-password-1' };
+    const body = { fullName: 'Esi Quaye', memberNo: 'P03-0999', houseId: 'H3', email: 'esi@presec2003.test', password: 'a-long-password-1' };
     expect((await ama.post('/api/members', body)).statusCode).toBe(403);
     expect((await kwame.post('/api/members', body)).statusCode).toBe(200);
     expect((await kwame.post('/api/members', body)).statusCode).toBe(409);
-    expect((await kwame.post('/api/members/CY-0999/verify')).statusCode).toBe(200);
+    expect((await kwame.post('/api/members/P03-0999/verify')).statusCode).toBe(200);
   });
   it('a suspended account cannot sign in', async () => {
-    await pool.query(`UPDATE users SET status='suspended' WHERE email='esi@classlegacy.test'`);
-    const r = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'esi@classlegacy.test', password: 'a-long-password-1' } });
+    await pool.query(`UPDATE users SET status='suspended' WHERE email='esi@presec2003.test'`);
+    const r = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'esi@presec2003.test', password: 'a-long-password-1' } });
     expect(r.statusCode).toBe(403);
   });
   it('wrong password and unknown email give the same answer', async () => {
-    const a = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'ama@classlegacy.test', password: 'nope' } });
-    const b = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'nobody@classlegacy.test', password: 'nope' } });
+    const a = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'ama@presec2003.test', password: 'nope' } });
+    const b = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'nobody@presec2003.test', password: 'nope' } });
     expect(a.statusCode).toBe(401); expect(a.json()).toEqual(b.json());
   });
 });
@@ -37,7 +37,7 @@ describe('AC-05 private information is protected', () => {
   });
   it('the directory never exposes amounts or phone numbers', async () => {
     const ama = await as(app, 'ama');
-    const d = (await ama.get('/api/members?q=CY-00')).json();
+    const d = (await ama.get('/api/members?q=P03-00')).json();
     expect(Object.keys(d.rows[0]).sort()).toEqual(['city', 'full_name', 'house_id', 'member_no', 'profession']);
   });
   it('captains see names of non-contributors only, and cannot edit payments', async () => {
@@ -45,7 +45,7 @@ describe('AC-05 private information is protected', () => {
     const o = (await abena.get('/api/captain/outreach')).json();
     expect(o.houseId).toBe('H2');
     expect(Object.keys(o.notYet[0] ?? { member_no: 1, full_name: 1, city: 1 }).sort()).toEqual(['city', 'full_name', 'member_no']);
-    expect((await abena.post('/api/finance/payments', { memberNo: 'CY-0002', amountGhs: 1, channel: 'cash', ref: 'X-1', paidOn: '2026-01-01' })).statusCode).toBe(403);
+    expect((await abena.post('/api/finance/payments', { memberNo: 'P03-0002', amountGhs: 1, channel: 'cash', ref: 'X-1', paidOn: '2026-01-01' })).statusCode).toBe(403);
   });
   it('cookie sessions need the app header on writes (CSRF)', async () => {
     const t = await token(app, 'ama');
@@ -106,7 +106,7 @@ describe('AC-09 secret ballot with eligibility, one vote each, quorum and thresh
     expect(r).toBe(b);
   });
   it('unverified members cannot vote; open results stay hidden', async () => {
-    await pool.query(`UPDATE members SET verified_at=NULL WHERE user_id=(SELECT id FROM users WHERE email='abena@classlegacy.test')`);
+    await pool.query(`UPDATE members SET verified_at=NULL WHERE user_id=(SELECT id FROM users WHERE email='abena@presec2003.test')`);
     expect((await (await as(app, 'abena')).post('/api/proposals/P3/vote', { choice: 'yes' })).statusCode).toBe(403);
     const list = (await (await as(app, 'ama')).get('/api/proposals')).json();
     expect(list.find((p: any) => p.id === 'P2').yes).toBeNull();
@@ -166,8 +166,8 @@ describe('AC-14 privileged accounts need two-factor sign-in when enforced', () =
     config.requireMfa = true;
     try {
       const secret = 'JBSWY3DPEHPK3PXP';
-      await pool.query(`UPDATE users SET totp_secret=$1 WHERE email='kofi@classlegacy.test'`, [secret]);
-      const noCode = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'kofi@classlegacy.test', password: 'Legacy-demo-2026' } });
+      await pool.query(`UPDATE users SET totp_secret=$1 WHERE email='kofi@presec2003.test'`, [secret]);
+      const noCode = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'kofi@presec2003.test', password: 'Legacy-demo-2026' } });
       expect(noCode.json().error).toBe('mfa_required');
       const t = await token(app, 'kofi', totp(secret));
       expect((await app.inject({ method: 'GET', url: '/api/finance/ledger', headers: { authorization: 'Bearer ' + t } })).statusCode).toBe(200);
@@ -197,11 +197,11 @@ describe('AC-17/18 audit trail integrity and the legacy archive', () => {
   });
   it('administrators are capped', async () => {
     const kwame = await as(app, 'kwame');
-    await pool.query(`INSERT INTO user_roles (user_id, role) SELECT id, 'admin' FROM users WHERE email IN ('yaw@classlegacy.test','nana@classlegacy.test')`);
-    const [{ id }] = await q<any>(pool, `SELECT id FROM users WHERE email='ama@classlegacy.test'`);
+    await pool.query(`INSERT INTO user_roles (user_id, role) SELECT id, 'admin' FROM users WHERE email IN ('yaw@presec2003.test','nana@presec2003.test')`);
+    const [{ id }] = await q<any>(pool, `SELECT id FROM users WHERE email='ama@presec2003.test'`);
     const { grantRole } = await import('../src/services/members.js');
     const { tx } = await import('../src/lib.js');
-    const actor = { userId: (await q<any>(pool, `SELECT id FROM users WHERE email='kwame@classlegacy.test'`))[0].id, name: 'Kwame', roles: ['admin' as const], memberId: null, mfaPassed: true };
+    const actor = { userId: (await q<any>(pool, `SELECT id FROM users WHERE email='kwame@presec2003.test'`))[0].id, name: 'Kwame', roles: ['admin' as const], memberId: null, mfaPassed: true };
     await expect(tx((db) => grantRole(db, actor, id, 'admin'))).rejects.toThrow(/limit 3/);
     void kwame;
   });

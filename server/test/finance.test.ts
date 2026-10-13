@@ -79,7 +79,7 @@ describe('AC-03 pledges are never counted as cash', () => {
 describe('maker-checker on manual payments', () => {
   it('the recorder cannot verify; a different officer can', async () => {
     const kofi = await as(app, 'kofi'), efua = await as(app, 'efua');
-    const rec = await kofi.post('/api/finance/payments', { memberNo: 'CY-0010', amountGhs: 300, channel: 'cash', ref: 'CSH-T1', paidOn: new Date().toISOString().slice(0, 10), note: 'receipt 0501' });
+    const rec = await kofi.post('/api/finance/payments', { memberNo: 'P03-0010', amountGhs: 300, channel: 'cash', ref: 'CSH-T1', paidOn: new Date().toISOString().slice(0, 10), note: 'receipt 0501' });
     expect(rec.statusCode).toBe(200);
     const id = rec.json().id;
     const self = await kofi.post(`/api/finance/payments/${id}/verify`);
@@ -89,7 +89,7 @@ describe('maker-checker on manual payments', () => {
   });
   it('blocks a duplicate bank reference', async () => {
     const kofi = await as(app, 'kofi');
-    const body = { memberNo: 'CY-0011', amountGhs: 100, channel: 'bank', ref: 'BNK-DUP-1', paidOn: '2026-01-01', note: '' };
+    const body = { memberNo: 'P03-0011', amountGhs: 100, channel: 'bank', ref: 'BNK-DUP-1', paidOn: '2026-01-01', note: '' };
     expect((await kofi.post('/api/finance/payments', body)).statusCode).toBe(200);
     expect((await kofi.post('/api/finance/payments', body)).statusCode).toBe(409);
   });
@@ -97,7 +97,7 @@ describe('maker-checker on manual payments', () => {
     const kofi = await as(app, 'kofi'), efua = await as(app, 'efua');
     const [p] = await q<any>(pool, `SELECT id FROM payments WHERE status='exception' AND member_id IS NULL LIMIT 1`);
     expect((await efua.post(`/api/finance/payments/${p.id}/verify`)).statusCode).toBe(409);
-    expect((await kofi.post(`/api/finance/payments/${p.id}/assign`, { memberNo: 'CY-0012' })).statusCode).toBe(200);
+    expect((await kofi.post(`/api/finance/payments/${p.id}/assign`, { memberNo: 'P03-0012' })).statusCode).toBe(200);
     expect((await kofi.post(`/api/finance/payments/${p.id}/verify`)).statusCode).toBe(403);
     expect((await efua.post(`/api/finance/payments/${p.id}/verify`)).statusCode).toBe(200);
   });

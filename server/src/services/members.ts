@@ -45,7 +45,7 @@ export async function confirmMfaEnrolment(db: Db, actor: Actor, code: string) {
 }
 
 /* ───────── members & houses */
-export const RegisterInput = z.object({ fullName: z.string().min(3), memberNo: z.string().regex(/^CY-\d{4}$/), houseId: z.string(), email: z.string().email().optional(), password: z.string().min(10).optional(), city: z.string().optional(), profession: z.string().optional() });
+export const RegisterInput = z.object({ fullName: z.string().min(3), memberNo: z.string().regex(/^P03-\d{4}$/), houseId: z.string(), email: z.string().email().optional(), password: z.string().min(10).optional(), city: z.string().optional(), profession: z.string().optional() });
 export async function registerMember(db: Db, actor: Actor, input: z.infer<typeof RegisterInput>) {
   need(actor, 'admin.members', 'register members');
   let userId: string | null = null;

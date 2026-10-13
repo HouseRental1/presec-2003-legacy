@@ -44,16 +44,18 @@ export async function seed({ members = 380, quiet = false } = {}) {
       custody: { entity: 'Registered association — name and number to confirm', signatories: '2 of 3 named signatories (to confirm)' },
     };
     for (const [k, v] of Object.entries(settings)) await db.query('INSERT INTO settings VALUES ($1,$2)', [k, JSON.stringify(v)]);
-    for (const [id, name] of [['H1', 'Aggrey'], ['H2', 'Nkrumah'], ['H3', 'Casely-Hayford'], ['H4', 'Yaa Asantewaa']]) await db.query('INSERT INTO houses VALUES ($1,$2)', [id, name]);
-    await db.query(`INSERT INTO projects VALUES ('P1','Six-unit classroom block, Afienya (sample)','construction')`);
+    for (const [id, name] of [['H1', 'Kwansa'], ['H2', 'Clerk'], ['H3', 'Engmann'], ['H4', 'Akro'], ['H5', 'Riis'], ['H6', 'Labone'], ['H7', 'Ako-Adjei'], ['H8', 'Owusu-Parry']]) await db.query('INSERT INTO houses VALUES ($1,$2)', [id, name]);
+    await db.query(`INSERT INTO projects VALUES ('P1','Legacy Project 1: six-unit classroom block, PRESEC Legon','construction')`);
     await db.query(`INSERT INTO budget_versions (project_id, version, total, lines, approved_by, note) VALUES ('P1',1,82000000,$1,'Member vote P1 + committee resolution','Baseline approved with contract award')`,
       [JSON.stringify({ contract: 74200000, fees: 3800000, contingency: 4000000 })]);
 
     const hash = await hashPassword(DEMO_PASSWORD);
     const F_ = ['Kwame','Kofi','Kwabena','Kwaku','Yaw','Kwesi','Kojo','Ama','Akosua','Abena','Akua','Yaa','Afua','Efua','Adwoa','Esi','Nana','Selorm','Edem','Delali','Elikem','Naa','Nii','Ato','Ekow','Fiifi','Araba','Mawuli','Sena','Dzifa','Zainab','Abdul','Fatima','Ibrahim','Mercy','Gifty','Emmanuel','Comfort','Samuel','Patience'];
     const L_ = ['Mensah','Boateng','Owusu','Asante','Adjei','Darko','Ofori','Frimpong','Tetteh','Agyeman','Appiah','Osei','Amoah','Quaye','Lartey','Addo','Annan','Badu','Gyamfi','Nkansah','Ansah','Sarpong','Amponsah','Agbeko','Dogbe','Kpodo','Issah','Bawa','Quartey','Aryee','Donkor','Opoku','Acquah','Danquah','Yeboah'];
-    const counts: Record<string, number> = { H1: Math.round(members * 0.295), H2: Math.round(members * 0.274), H3: Math.round(members * 0.232) };
-    counts.H4 = members - counts.H1 - counts.H2 - counts.H3;
+    // PRESEC's eight original houses (sizes differ, as they do in real life)
+    const share = { H1: 0.137, H2: 0.132, H3: 0.129, H4: 0.126, H5: 0.124, H6: 0.121, H7: 0.118 };
+    const counts: Record<string, number> = Object.fromEntries(Object.entries(share).map(([h, x]) => [h, Math.round(members * x)]));
+    counts.H8 = members - Object.values(counts).reduce((a, b) => a + b, 0);
     const fixedHouses = STAFF.filter((s) => s.house).map((s) => s.house as string).concat(['H2']); // + Kwabena Tetteh
     fixedHouses.forEach((h) => counts[h]--);
     const pool_: string[] = []; for (const [h, c] of Object.entries(counts)) for (let i = 0; i < c; i++) pool_.push(h);
@@ -61,24 +63,24 @@ export async function seed({ members = 380, quiet = false } = {}) {
 
     let n = 0;
     for (const s of STAFF) {
-      const [u] = await q<any>(db, 'INSERT INTO users (email, password_hash, display_name) VALUES ($1,$2,$3) RETURNING id', [`${s.key}@classlegacy.test`, hash, s.name]);
+      const [u] = await q<any>(db, 'INSERT INTO users (email, password_hash, display_name) VALUES ($1,$2,$3) RETURNING id', [`${s.key}@presec2003.test`, hash, s.name]);
       for (const r of s.roles) await db.query('INSERT INTO user_roles (user_id, role) VALUES ($1,$2)', [u.id, r]);
       let memberId: string | null = null;
       if (s.house) {
-        n++; const [m] = await q<any>(db, `INSERT INTO members (member_no, user_id, full_name, city, verified_at) VALUES ($1,$2,$3,'Accra',now()) RETURNING id`, ['CY-' + String(n).padStart(4, '0'), u.id, s.name]);
+        n++; const [m] = await q<any>(db, `INSERT INTO members (member_no, user_id, full_name, city, verified_at) VALUES ($1,$2,$3,'Accra',now()) RETURNING id`, ['P03-' + String(n).padStart(4, '0'), u.id, s.name]);
         memberId = m.id; await db.query(`INSERT INTO house_memberships (member_id, house_id, valid_from, reason) VALUES ($1,$2,'2000-01-01','Registered from school records')`, [m.id, s.house]);
       }
       users[s.key] = { userId: u.id, name: s.name, roles: [...s.roles] as Role[], memberId, mfaPassed: true };
     }
     await db.query(`INSERT INTO house_captains VALUES ('H2',$1)`, [users.abena.userId]);
     // Kwabena Tetteh: member who owns a bidding firm (conflict of interest)
-    n++; const [kt] = await q<any>(db, `INSERT INTO members (member_no, full_name, city, profession, verified_at) VALUES ($1,'Kwabena Tetteh','Accra','Director, Tetteh Builders Ltd',now()) RETURNING id`, ['CY-' + String(n).padStart(4, '0')]);
+    n++; const [kt] = await q<any>(db, `INSERT INTO members (member_no, full_name, city, profession, verified_at) VALUES ($1,'Kwabena Tetteh','Accra','Director, Tetteh Builders Ltd',now()) RETURNING id`, ['P03-' + String(n).padStart(4, '0')]);
     await db.query(`INSERT INTO house_memberships (member_id, house_id, valid_from, reason) VALUES ($1,'H2','2000-01-01','Registered from school records')`, [kt.id]);
     const abroad = [['London', 'GBP'], ['Manchester', 'GBP'], ['Houston', 'USD'], ['Toronto', 'USD']];
     while (n < members) {
       n++; const away = R() < 0.13 ? pick(abroad) : null;
       const [m] = await q<any>(db, `INSERT INTO members (member_no, full_name, city, profession, home_currency, verified_at, show_on_wall) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-        ['CY-' + String(n).padStart(4, '0'), pick(F_) + ' ' + pick(L_), away ? away[0] : pick(['Accra', 'Accra', 'Kumasi', 'Tema', 'Takoradi', 'Cape Coast', 'Ho', 'Tamale']), pick(['Engineer', 'Nurse', 'Teacher', 'Accountant', 'Banker', 'Doctor', 'Lawyer', 'Entrepreneur', 'IT consultant']), away ? away[1] : 'GHS', n <= members - 8 ? new Date() : null, R() < 0.72]);
+        ['P03-' + String(n).padStart(4, '0'), pick(F_) + ' ' + pick(L_), away ? away[0] : pick(['Accra', 'Accra', 'Kumasi', 'Tema', 'Takoradi', 'Cape Coast', 'Ho', 'Tamale']), pick(['Engineer', 'Nurse', 'Teacher', 'Accountant', 'Banker', 'Doctor', 'Lawyer', 'Entrepreneur', 'IT consultant']), away ? away[1] : 'GHS', n <= members - 8 ? new Date() : null, R() < 0.72]);
       await db.query(`INSERT INTO house_memberships (member_id, house_id, valid_from, reason) VALUES ($1,$2,'2000-01-01','Registered from school records')`, [m.id, pool_.pop()]);
     }
     await db.query(`INSERT INTO competition_rules (version, status, period_name, period_start, period_end, per_member_target, weight_target, weight_participation, approved_by)
@@ -117,23 +119,23 @@ export async function seed({ members = 380, quiet = false } = {}) {
 
   // ── contributions through the real flows
   const members_ = await q<any>(pool, `SELECT m.id, m.member_no, m.home_currency, m.user_id, hm.house_id FROM members m JOIN house_memberships hm ON hm.member_id=m.id ORDER BY m.member_no`);
-  const prob: Record<string, number> = { H1: 0.55, H2: 0.62, H3: 0.71, H4: 0.5 };
+  const prob: Record<string, number> = { H1: 0.55, H2: 0.62, H3: 0.71, H4: 0.5, H5: 0.58, H6: 0.66, H7: 0.52, H8: 0.61 };
   const AMTS = [100, 200, 200, 300, 300, 500, 500, 500, 800, 1000, 1000, 1500, 2000, 3000];
   await tx(async (db) => {
     for (const m of members_) {
-      if (R() < 0.45 || m.member_no === 'CY-0001') await db.query(`INSERT INTO pledges (member_id, project_id, amount, instalments, status) VALUES ($1,'P1',$2,$3,'active')`, [m.id, m.member_no === 'CY-0001' ? 300000 : pick([1000, 1500, 2000, 2500, 3000, 5000]) * 100, pick([3, 5, 6, 10])]);
+      if (R() < 0.45 || m.member_no === 'P03-0001') await db.query(`INSERT INTO pledges (member_id, project_id, amount, instalments, status) VALUES ($1,'P1',$2,$3,'active')`, [m.id, m.member_no === 'P03-0001' ? 300000 : pick([1000, 1500, 2000, 2500, 3000, 5000]) * 100, pick([3, 5, 6, 10])]);
     }
   });
   const fakeMember = (m: any): Actor => ({ userId: m.user_id ?? (null as any), name: m.member_no, roles: ['member'], memberId: m.id, mfaPassed: true });
   let k = 0;
   for (const m of members_) {
-    if (m.member_no !== 'CY-0001' && R() >= prob[m.house_id]) continue;
-    const times = m.member_no === 'CY-0001' ? 2 : 1 + (R() < 0.25 ? 1 : 0);
+    if (m.member_no !== 'P03-0001' && R() >= prob[m.house_id]) continue;
+    const times = m.member_no === 'P03-0001' ? 2 : 1 + (R() < 0.25 ? 1 : 0);
     for (let t = 0; t < times; t++) {
       const paidOn = addDays(start, Math.min(70, Math.floor(Math.pow(R(), 0.85) * 71)));
       const foreign = m.home_currency !== 'GHS';
       const channel = foreign ? 'card' : R() < 0.75 ? 'momo' : 'bank';
-      const amount = m.member_no === 'CY-0001' ? 500 : foreign ? pick([30, 50, 80, 100, 150]) : pick(AMTS);
+      const amount = m.member_no === 'P03-0001' ? 500 : foreign ? pick([30, 50, 80, 100, 150]) : pick(AMTS);
       if (channel === 'bank') {
         const recent = paidOn > addDays(T, -6);
         await tx(async (db) => {
@@ -157,9 +159,9 @@ export async function seed({ members = 380, quiet = false } = {}) {
   });
   // donation, cash pending, unmatched and duplicate exceptions
   await tx(async (db) => {
-    const d = await P.recordManual(db, users.kofi, { memberNo: 'CY-0020', amountGhs: 15000, channel: 'bank', ref: 'BNK-DELTA-0930', paidOn: addDays(T, -13), note: 'Corporate donation introduced by CY-0020', category: 'donor', payerName: 'Delta Paints Ghana Ltd (sample)' });
+    const d = await P.recordManual(db, users.kofi, { memberNo: 'P03-0020', amountGhs: 15000, channel: 'bank', ref: 'BNK-DELTA-0930', paidOn: addDays(T, -13), note: 'Corporate donation introduced by P03-0020', category: 'donor', payerName: 'Delta Paints Ghana Ltd (sample)' });
     await P.verify(db, users.efua, d.id);
-    await P.recordManual(db, users.kofi, { memberNo: 'CY-0017', amountGhs: 600, channel: 'cash', ref: 'CSH-0412', paidOn: addDays(T, -2), note: 'Collected at Accra chapter meeting, receipt book 0412', category: 'member' });
+    await P.recordManual(db, users.kofi, { memberNo: 'P03-0017', amountGhs: 600, channel: 'cash', ref: 'CSH-0412', paidOn: addDays(T, -2), note: 'Collected at Accra chapter meeting, receipt book 0412', category: 'member' });
     await db.query(`INSERT INTO payments (project_id, payer_name, channel, source, currency, amount_original, amount_ghs, external_ref, paid_on, status, exception_reason, recorded_by)
       VALUES ('P1','Unknown — narration “CLASSFUND KWESI 7781”','bank','manual','GHS',75000,75000,'BNK-7781-1008',$1,'exception','Unmatched — bank credit has no member number. Assign it to a member before verifying.',$2)`, [addDays(T, -5), users.kofi.userId]);
   });
@@ -175,7 +177,7 @@ export async function seed({ members = 380, quiet = false } = {}) {
     const c2 = await F.createCertificate(db, users.nana, { contractId: 'CON-01', grossToDateGhs: 182000, issuedOn: addDays(T, -6), issuedBy: 'Mensa & Partners QS' });
     const r2 = await F.createRequest(db, users.nana, { title: 'Interim payment certificate ' + c2.id, payee: 'Asaase Construction Ltd', category: 'Construction contract', certificateId: c2.id });
     await F.decideRequest(db, users.efua, r2.id, 'approved');
-    await F.createRequest(db, users.nana, { title: 'Site signboard and donor panel', payee: 'Graphix Signs, Afienya (sample)', amountGhs: 2800, category: 'Site costs' });
+    await F.createRequest(db, users.nana, { title: 'Site signboard and donor panel', payee: 'Graphix Signs, Madina (sample)', amountGhs: 2800, category: 'Site costs' });
   });
   // governance: P1 closed (contract award), P2 open (VAR-02), P3 open (rules v1.1)
   const voters = (await q<any>(pool, `SELECT id FROM members WHERE verified_at IS NOT NULL AND user_id IS NULL ORDER BY random()`));
@@ -191,7 +193,7 @@ export async function seed({ members = 380, quiet = false } = {}) {
     const p3 = await G.createProposal(db, users.akosua, { title: 'Adopt house competition rules v1.1 for the next drive', description: 'Weights 55% target / 45% participation; per-member target GH₵ 1,200. Applies only to the next period.', threshold: 'two_thirds', quorumPct: 30, opensOn: addDays(T, -3), closesOn: addDays(T, 14), linkedType: 'rules', linkedId: '1.1' });
     for (let i = 0; i < n3; i++) await G.castVote(db, fakeMember(voters[i]), p3.id, i < n3 * 0.72 ? 'yes' : i < n3 * 0.93 ? 'no' : 'abstain');
   });
-  if (!quiet) console.log(`Seeded ${members} members. Sign in as e.g. ama@classlegacy.test / ${DEMO_PASSWORD}`);
+  if (!quiet) console.log(`Seeded ${members} members. Sign in as e.g. ama@presec2003.test / ${DEMO_PASSWORD}`);
   return users;
 }
 

@@ -9,7 +9,7 @@ export async function fresh(members = 380) {
   return buildApp();
 }
 export async function token(app: App, key: string, code?: string) {
-  const r = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: `${key}@classlegacy.test`, password: DEMO_PASSWORD, ...(code ? { code } : {}) } });
+  const r = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: `${key}@presec2003.test`, password: DEMO_PASSWORD, ...(code ? { code } : {}) } });
   if (r.statusCode !== 200) throw new Error(`login ${key}: ${r.statusCode} ${r.body}`);
   return r.json().token as string;
 }
@@ -25,4 +25,4 @@ export function signed(body: object) {
   const raw = JSON.stringify(body);
   return { raw, sig: hmacHex(config.webhookSecret, raw) };
 }
-export const memberNo = async (key: string) => (await q<any>(pool, `SELECT m.member_no FROM members m JOIN users u ON u.id=m.user_id WHERE u.email=$1`, [`${key}@classlegacy.test`]))[0].member_no as string;
+export const memberNo = async (key: string) => (await q<any>(pool, `SELECT m.member_no FROM members m JOIN users u ON u.id=m.user_id WHERE u.email=$1`, [`${key}@presec2003.test`]))[0].member_no as string;

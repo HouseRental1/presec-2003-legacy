@@ -1,2 +1,2 @@
-{ "name": "Class of [Year] Legacy", "short_name": "Legacy", "start_url": "/", "display": "standalone", "background_color": "#F3F5F0", "theme_color": "#0D4A37",
+{ "name": "Class of 2003 Legacy", "short_name": "Class of 2003", "start_url": "/", "display": "standalone", "background_color": "#F2F4F8", "theme_color": "#0B3A8C",
   "icons": [{ "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }] }

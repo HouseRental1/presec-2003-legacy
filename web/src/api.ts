@@ -20,5 +20,6 @@ export const ghs = (pesewas: number, dp = 0) => 'GH₵ ' + (Number(pesewas || 0
 export const pct = (x: number, dp = 0) => (x * 100).toFixed(dp) + '%';
 export const date = (iso?: string | null) => (iso ? new Date(iso.slice(0, 10) + 'T12:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }) : '—');
 export const today = () => new Date().toISOString().slice(0, 10);
-export const HOUSE_COLOR: Record<string, string> = { H1: 'var(--h1)', H2: 'var(--h2)', H3: 'var(--h3)', H4: 'var(--h4)' };
-export const HOUSE_NAME: Record<string, string> = { H1: 'Aggrey', H2: 'Nkrumah', H3: 'Casely-Hayford', H4: 'Yaa Asantewaa' };
+export const HOUSE_COLOR: Record<string, string> = Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8].map((n) => ['H' + n, `var(--h${n})`]));
+/** PRESEC Legon's eight original houses. */
+export const HOUSE_NAME: Record<string, string> = { H1: 'Kwansa', H2: 'Clerk', H3: 'Engmann', H4: 'Akro', H5: 'Riis', H6: 'Labone', H7: 'Ako-Adjei', H8: 'Owusu-Parry' };

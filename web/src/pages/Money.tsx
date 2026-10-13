@@ -34,7 +34,7 @@ function Mine() {
           <label className="f" htmlFor="am">Amount<input id="am" type="number" min="1" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
           <label className="f" htmlFor="cu">Currency<select id="cu" value={currency} onChange={(e) => setCurrency(e.target.value)}><option>GHS</option><option>USD</option><option>GBP</option></select></label>
           <label className="f" htmlFor="ch">Pay with<select id="ch" value={channel} onChange={(e) => setChannel(e.target.value)}><option value="momo">Mobile money</option><option value="card">Card</option></select></label>
-          <label className="f" htmlFor="ob">On behalf of (optional)<input id="ob" placeholder="CY-0000" value={onBehalf} onChange={(e) => setOnBehalf(e.target.value)} /></label>
+          <label className="f" htmlFor="ob">On behalf of (optional)<input id="ob" placeholder="P03-0000" value={onBehalf} onChange={(e) => setOnBehalf(e.target.value)} /></label>
         </div>
         <button className="btn primary" onClick={pay}>Pay now</button>
         <p className="def">Your PIN is entered on your phone or the provider’s page, never in this app. Your house is credited the full amount; fees are a project cost.</p>
@@ -80,7 +80,7 @@ function Verify() {
   return <div className="stack">
     <div className="callout">One person records a manual payment; a different person verifies it against the bank or MoMo statement. The server enforces this.</div>
     {can('fin.record') && <div className="card stack"><h2>Record a payment</h2><div className="fgrid">
-      <label className="f" htmlFor="rn">Member number<input id="rn" value={rec.memberNo} onChange={(e) => setRec({ ...rec, memberNo: e.target.value })} placeholder="CY-0000" /></label>
+      <label className="f" htmlFor="rn">Member number<input id="rn" value={rec.memberNo} onChange={(e) => setRec({ ...rec, memberNo: e.target.value })} placeholder="P03-0000" /></label>
       <label className="f" htmlFor="ra">Amount (GH₵)<input id="ra" type="number" value={rec.amountGhs} onChange={(e) => setRec({ ...rec, amountGhs: e.target.value })} /></label>
       <label className="f" htmlFor="rc">Channel<select id="rc" value={rec.channel} onChange={(e) => setRec({ ...rec, channel: e.target.value })}><option value="bank">Bank</option><option value="cash">Cash</option></select></label>
       <label className="f" htmlFor="rr">Reference<input id="rr" value={rec.ref} onChange={(e) => setRec({ ...rec, ref: e.target.value })} /></label>
