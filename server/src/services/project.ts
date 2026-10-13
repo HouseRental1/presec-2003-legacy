@@ -10,7 +10,7 @@ export async function progress(db: Db | any) {
   return { reported: w('reported_pct'), verified: w('verified_pct'), accepted: w('accepted_pct'), workPackages: wps };
 }
 
-const Pct = z.object({ pct: z.number().int().min(0).max(100), evidence: z.string().min(3).max(500) });
+const Pct = z.object({ pct: z.number().int().min(0).max(100), evidence: z.string().min(3).max(500), fileId: z.string().uuid().optional() });
 export const PctInput = Pct;
 
 /** Stage 1 — the PM records what the contractor reports, with evidence. */
@@ -19,7 +19,7 @@ export async function reportProgress(db: Db, actor: Actor, wpId: string, input: 
   const wp = await one<any>(db, 'SELECT * FROM work_packages WHERE id=$1 FOR UPDATE', [wpId]);
   if (input.pct < wp.reported_pct) throw invalid('Reported progress cannot go backwards. Record a defect instead.');
   await db.query('UPDATE work_packages SET reported_pct=$2 WHERE id=$1', [wpId, input.pct]);
-  await db.query(`INSERT INTO progress_events (wp_id, stage, pct, evidence, recorded_by) VALUES ($1,'reported',$2,$3,$4)`, [wpId, input.pct, input.evidence, actor.userId]);
+  await db.query(`INSERT INTO progress_events (wp_id, stage, pct, evidence, recorded_by, file_id) VALUES ($1,'reported',$2,$3,$4,$5)`, [wpId, input.pct, input.evidence, actor.userId, input.fileId ?? null]);
   await audit(db, actor, 'Recorded contractor progress', wpId, `${input.pct}% · ${input.evidence}`);
 }
 /** Stage 2 — a committee member checks on site. Must be someone other than whoever recorded the report. */
@@ -31,7 +31,7 @@ export async function verifyProgress(db: Db, actor: Actor, wpId: string, input: 
   const [last] = await q<any>(db, `SELECT recorded_by FROM progress_events WHERE wp_id=$1 AND stage='reported' ORDER BY id DESC LIMIT 1`, [wpId]);
   if (last?.recorded_by === actor.userId) throw forbid('You recorded the contractor report, so someone else must verify it.');
   await db.query('UPDATE work_packages SET verified_pct=$2 WHERE id=$1', [wpId, input.pct]);
-  await db.query(`INSERT INTO progress_events (wp_id, stage, pct, evidence, recorded_by) VALUES ($1,'verified',$2,$3,$4)`, [wpId, input.pct, input.evidence, actor.userId]);
+  await db.query(`INSERT INTO progress_events (wp_id, stage, pct, evidence, recorded_by, file_id) VALUES ($1,'verified',$2,$3,$4,$5)`, [wpId, input.pct, input.evidence, actor.userId, input.fileId ?? null]);
   await audit(db, actor, 'Verified progress on site', wpId, `${input.pct}%`);
 }
 /** Stage 3 — the PM records the inspector's acceptance. Open defects block 100%. Acceptance never authorises payment. */
@@ -113,6 +113,7 @@ export async function overview(db: Db | any, actor: Actor) {
     inspections: await q(db, 'SELECT * FROM inspections ORDER BY inspected_on'),
     defects: await q(db, 'SELECT * FROM defects ORDER BY id'),
     risks: await q(db, 'SELECT * FROM risks ORDER BY id'),
+    photos: await q(db, `SELECT pe.wp_id, pe.stage, pe.pct, pe.recorded_at, pe.file_id FROM progress_events pe WHERE pe.file_id IS NOT NULL ORDER BY pe.id DESC LIMIT 24`),
     coi: await q(db, `SELECT c.id, c.interest, c.action, c.declared_at, s.name supplier, coalesce(u.display_name, m.full_name) person
       FROM coi_declarations c JOIN suppliers s ON s.id=c.supplier_id LEFT JOIN users u ON u.id=c.user_id LEFT JOIN members m ON m.id=c.member_id ORDER BY c.id`),
   };

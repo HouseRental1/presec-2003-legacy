@@ -2,7 +2,10 @@
   "name": "presec-2003-legacy",
   "private": true,
   "version": "1.1.0",
-  "workspaces": ["server", "web"],
+  "workspaces": [
+    "server",
+    "web"
+  ],
   "scripts": {
     "migrate": "npm -w server run migrate",
     "seed": "npm -w server run seed",
@@ -10,6 +13,13 @@
     "dev:web": "npm -w web run dev",
     "test": "npm -w server test",
     "build": "npm -w server run build && npm -w web run build",
-    "typecheck": "npm -w server run typecheck && npm -w web run typecheck"
+    "typecheck": "npm -w server run typecheck && npm -w web run typecheck",
+    "vercel-build": "node scripts/vercel-build.mjs"
+  },
+  "dependencies": {
+    "fastify": "5.2.1"
+  },
+  "engines": {
+    "node": "22.x"
   }
 }

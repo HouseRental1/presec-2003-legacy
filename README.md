@@ -40,7 +40,7 @@ Every person, firm, house name, figure and exchange rate in the seed is **sample
 
 ```bash
 createdb class_legacy_test                   # once
-npm test                                     # 36 tests, ~10 s
+npm test                                     # 51 tests, ~15 s
 DATABASE_URL=... ./scripts/backup-restore-check.sh   # AC-13
 ```
 
@@ -90,13 +90,23 @@ docker run -p 8080:8080 -e DATABASE_URL=... -e PAYMENT_WEBHOOK_SECRET=... -e WEB
 
 Run it behind HTTPS (the cookie is `Secure` in production), with automated PostgreSQL backups and a regular run of `backup-restore-check.sh`. The development sandbox endpoint that plays the payment provider is disabled when `NODE_ENV=production`.
 
+## Features
+
+- **Year group:** register import with invitations by email and SMS, effective-dated house records for the eight original houses, a directory, profiles, privacy and message preferences, password reset, and two-factor sign-in for staff.
+- **Money:** Paystack checkout (MoMo and cards) with signed, re-verified webhooks; bank-transfer evidence with slip upload; maker-checker verification; reversals; provider settlements with suspense for differences; and receipts.
+- **Public page:** totals, a contributors' wall (names only) and donations from friends of the school.
+- **House competition:** fair scoring, a captain's outreach list, reminders and WhatsApp-friendly updates.
+- **Payments out:** QS certificates with retention, two-approver requests, conflict-of-interest blocks and release by the treasurer.
+- **Classroom block:** work packages, three-stage progress with site photos, inspections and defects, risks, variations, and budget versions.
+- **Governance:** secret ballots with quorum and thresholds; linked changes (variations, rule versions) apply automatically when a ballot passes.
+- **Community:** announcements and events with RSVP.
+- **Legacy:** handover checklist with document scans, and a maintenance log.
+- **Administration:** roles and temporary delegation, captains, control settings, competition periods, ballots, project set-up and CSV exports.
+- **Operations:** a hash-chained audit trail, a backup-restore check, daily and monthly scheduled jobs, and the Vercel set-up (see `DEPLOY.md`).
+
 ## Still needed before launch
 
-These items need decisions, accounts or professionals that a codebase cannot supply:
-
-1. **Payment provider adapter.** `initiate` and `handleWebhook` are provider-neutral, with a signed sandbox. Once the committee chooses a Ghana-supported provider, add its adapter (checkout call, signature format, settlement report) and test it in the provider's sandbox.
-2. **Message delivery.** Notifications are stored with their channels (in-app, SMS, email). Connect an SMS and email provider to send them.
-3. **File uploads.** Receipts, site photos and drawings need private object storage with expiring links. Evidence is currently recorded as text references.
-4. **Admin set-up screens.** The API supports creating ballots and drafting rule versions, but the web app does not have screens for them yet. Entering the contract, budget baseline, work packages and the competition period currently happens by bootstrap/SQL.
-5. **Real configuration.** The year group (2003), school (PRESEC Legon), houses (the original eight) and site (PRESEC Legon campus) are set. Still to confirm: the logo, member numbering, approval thresholds, quorum, fees, committee members and the legal custody details all need confirming (see the spec's decisions register).
-6. **Security review and user testing (AC-16, AC-17).** Commission an independent penetration test and a data-protection review under Ghana's Data Protection Act. Run user acceptance testing with representative members on their own phones.
+1. **Choose the SMS provider.** Arkesel and Hubtel adapters are built; set `SMS_PROVIDER` and its keys. Until then, messages are recorded but not sent.
+2. **Paystack live keys** and one real end-to-end payment (see `DEPLOY.md`).
+3. **Real configuration:** the logo, member numbering, approval thresholds, quorum, committee members and legal custody details.
+4. **Security review and user testing (AC-16, AC-17).** Commission an independent penetration test and a data-protection review under Ghana's Data Protection Act, and run user acceptance testing with members on their own phones.

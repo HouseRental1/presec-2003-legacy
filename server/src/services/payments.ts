@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { randomBytes } from 'node:crypto';
 import { Actor, Db, q, one, need, audit, notify, forbid, conflict, invalid, setting, ofBp, fmt, today, config, hmacHex, safeEqualHex, sha256, AppError } from '../lib.js';
 import { postTxn, reverseTxn, balance } from './ledger.js';
+import * as paystack from './paystack.js';
 
 const PROJECT = 'P1';
 type Payment = any;
@@ -61,16 +62,16 @@ export async function recordManual(db: Db, actor: Actor, input: z.infer<typeof M
 }
 
 /* member uploads transfer evidence; treasury verifies */
-export const EvidenceInput = z.object({ amountGhs: z.number().positive().max(10_000_000), ref: z.string().min(3).max(80), paidOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), note: z.string().max(500).default('') });
+export const EvidenceInput = z.object({ amountGhs: z.number().positive().max(10_000_000), ref: z.string().min(3).max(80), paidOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), note: z.string().max(500).default(''), fileId: z.string().uuid().optional() });
 export async function submitEvidence(db: Db, actor: Actor, input: z.infer<typeof EvidenceInput>) {
   need(actor, 'pay', 'submit payments');
   if (!actor.memberId) throw forbid('Only members can submit payment evidence.');
   const amount = Math.round(input.amountGhs * 100);
   try {
     const [p] = await q<Payment>(db,
-      `INSERT INTO payments (project_id, member_id, channel, source, currency, amount_original, amount_ghs, external_ref, paid_on, status, evidence_note, recorded_by)
-       VALUES ($1,$2,'bank','self','GHS',$3,$3,$4,$5,'pending',$6,$7) RETURNING *`,
-      [PROJECT, actor.memberId, amount, input.ref.trim(), input.paidOn, input.note, actor.userId]);
+      `INSERT INTO payments (project_id, member_id, channel, source, currency, amount_original, amount_ghs, external_ref, paid_on, status, evidence_note, recorded_by, evidence_file)
+       VALUES ($1,$2,'bank','self','GHS',$3,$3,$4,$5,'pending',$6,$7,$8) RETURNING *`,
+      [PROJECT, actor.memberId, amount, input.ref.trim(), input.paidOn, input.note, actor.userId, input.fileId ?? null]);
     await audit(db, actor, 'Submitted bank transfer evidence', p.id, fmt(amount));
     return p;
   } catch (e: any) { if (e.code === '23505') throw conflict('That bank reference has already been submitted.'); throw e; }
@@ -150,48 +151,70 @@ export async function importOpening(db: Db, actor: Actor, input: z.infer<typeof 
   return { imported: done.length, skipped };
 }
 
-/* ───────── payment gateway (provider-agnostic) */
+/* ───────── payment gateway (provider-agnostic core + Paystack adapter) */
 export const InitiateInput = z.object({
-  amount: z.number().positive().max(1_000_000), currency: z.enum(['GHS', 'USD', 'GBP']),
+  amount: z.number().positive().max(1_000_000), currency: z.enum(['GHS', 'USD', 'GBP']).default('GHS'),
   channel: z.enum(['momo', 'card']), network: z.string().optional(), onBehalfOfNo: z.string().optional(),
 });
+async function startCheckout(db: Db, p: Payment, email: string, channel: 'momo' | 'card') {
+  if (config.paymentProvider === 'paystack') {
+    const r = await paystack.initialize({ email, amountPesewas: p.amount_original, reference: p.external_ref, channel, callbackUrl: `${config.appUrl}/pay/return?ref=${encodeURIComponent(p.external_ref)}`, metadata: { payment_id: p.id } });
+    await db.query('UPDATE payments SET provider=$2, checkout_url=$3 WHERE id=$1', [p.id, 'paystack', r.authorizationUrl]);
+    return { provider: 'paystack', url: r.authorizationUrl, instruction: 'Continue to Paystack to approve the payment.' };
+  }
+  await db.query(`UPDATE payments SET provider='sandbox' WHERE id=$1`, [p.id]);
+  return { provider: 'sandbox', url: null, instruction: channel === 'momo' ? 'Approve the prompt on your phone.' : 'Complete the card check on the provider page.' };
+}
 export async function initiate(db: Db, actor: Actor, input: z.infer<typeof InitiateInput>) {
   need(actor, 'pay', 'make contributions');
   if (!actor.memberId) throw forbid('Only members can contribute through the app.');
   if (input.channel === 'momo' && input.currency !== 'GHS') throw invalid('Mobile money payments are in cedis. Choose GHS or pay by card.');
+  if (config.paymentProvider === 'paystack' && input.currency !== 'GHS') throw invalid('Payments are charged in cedis. Enter the amount in GH₵; your bank converts card payments from other currencies.');
   let memberId = actor.memberId, payer: string | null = null;
   if (input.onBehalfOfNo) { const t = await memberByNo(db, input.onBehalfOfNo); memberId = t.id; payer = actor.name; }
   const fx = await setting<Record<string, number>>(db, 'fx_indicative');
   const original = Math.round(input.amount * 100);
-  const ref = 'CYL-' + randomBytes(6).toString('hex').toUpperCase();
+  const ref = 'P03-' + randomBytes(6).toString('hex').toUpperCase();
+  const [u] = await q<any>(db, 'SELECT email FROM users WHERE id=$1', [actor.userId]);
   const [p] = await q<Payment>(db,
-    `INSERT INTO payments (project_id, member_id, payer_name, channel, network, source, currency, amount_original, fx_rate, amount_ghs, external_ref, paid_on, status, evidence_note)
-     VALUES ($1,$2,$3,$4,$5,'gateway',$6,$7,$8,$9,$10,$11,'pending','Awaiting provider confirmation') RETURNING *`,
-    [PROJECT, memberId, payer, input.channel, input.network ?? null, input.currency, original, fx[input.currency] ?? 1, Math.round(original * (fx[input.currency] ?? 1)), ref, today()]);
+    `INSERT INTO payments (project_id, member_id, payer_name, payer_email, channel, network, source, currency, amount_original, fx_rate, amount_ghs, external_ref, paid_on, status, evidence_note)
+     VALUES ($1,$2,$3,$4,$5,$6,'gateway',$7,$8,$9,$10,$11,$12,'pending','Awaiting provider confirmation') RETURNING *`,
+    [PROJECT, memberId, payer, u?.email ?? null, input.channel, input.network ?? null, input.currency, original, fx[input.currency] ?? 1, Math.round(original * (fx[input.currency] ?? 1)), ref, today()]);
+  const checkout = await startCheckout(db, p, u?.email ?? `${memberId}@members.invalid`, input.channel);
   await audit(db, actor, 'Started gateway payment', p.id, `${input.currency} ${input.amount} · ${ref}`);
-  // A real adapter returns the provider's checkout URL / USSD prompt. The PIN is entered on the
-  // member's phone or the provider's page; this system never sees it.
-  return { paymentId: p.id, reference: ref, checkout: { provider: 'sandbox', instruction: input.channel === 'momo' ? 'Approve the prompt on your phone.' : 'Complete the card check on the provider page.' } };
+  // The member's PIN / card details are entered with the provider only; this system never sees them.
+  return { paymentId: p.id, reference: ref, checkout };
 }
 
-export const WebhookEvent = z.object({
-  eventId: z.string().min(1), reference: z.string().min(1), status: z.enum(['success', 'failed']),
-  currency: z.enum(['GHS', 'USD', 'GBP']), amount: z.number().int().positive(),       // minor units, original currency
-  settlementRate: z.number().positive().optional(), feeGhs: z.number().int().nonnegative().optional(), paidAt: z.string().optional(),
-});
-/**
- * Provider callback. Signature is HMAC-SHA256 of the raw body with the shared secret.
- * Replays are ignored (UNIQUE provider,event_id). Amount and currency must match the intent.
- * A browser redirect is never treated as proof of payment — only this signed callback.
- */
-export async function handleWebhook(db: Db, rawBody: string, signature: string | undefined, provider = 'sandbox') {
-  if (!signature || !safeEqualHex(hmacHex(config.webhookSecret, rawBody), signature)) throw new AppError(401, 'bad_signature', 'Invalid webhook signature.');
-  const ev = WebhookEvent.parse(JSON.parse(rawBody));
-  const ins = await q(db, `INSERT INTO provider_events (provider, event_id, payload, outcome) VALUES ($1,$2,$3,'received') ON CONFLICT DO NOTHING RETURNING id`, [provider, ev.eventId, ev]);
+/** Friends of the school can give through the public page. Donations go to the project, not to a house. */
+export const DonateInput = z.object({ name: z.string().min(2).max(120), email: z.string().email(), amountGhs: z.number().min(5).max(1_000_000), channel: z.enum(['momo', 'card']).default('card') });
+export async function publicDonate(db: Db, input: z.infer<typeof DonateInput>) {
+  const ref = 'DON-' + randomBytes(6).toString('hex').toUpperCase();
+  const amount = Math.round(input.amountGhs * 100);
+  const [p] = await q<Payment>(db,
+    `INSERT INTO payments (project_id, payer_name, payer_email, category, channel, source, currency, amount_original, amount_ghs, external_ref, paid_on, status, evidence_note)
+     VALUES ($1,$2,$3,'donor',$4,'gateway','GHS',$5,$5,$6,$7,'pending','Public donation — awaiting provider confirmation') RETURNING *`,
+    [PROJECT, input.name, input.email.toLowerCase(), input.channel, amount, ref, today()]);
+  const checkout = await startCheckout(db, p, input.email, input.channel);
+  await audit(db, null, 'Public donation started', p.id, `${fmt(amount)} · ${ref}`);
+  return { reference: ref, checkout };
+}
+
+/** Status for the return page. Members see their own; anyone holding the reference sees only the status. */
+export async function paymentStatus(db: Db | any, reference: string) {
+  const [p] = await q<any>(db, 'SELECT status, amount_ghs, receipt_no, category FROM payments WHERE external_ref=$1', [reference]);
+  if (!p) throw new AppError(404, 'not_found', 'No payment with that reference.');
+  return { status: p.status, amount: p.amount_ghs, receipt: p.receipt_no, category: p.category };
+}
+
+export interface ProviderEvent { provider: string; eventId: string; reference: string; status: 'success' | 'failed'; currency: string; amount: number; settlementRate?: number; feeGhs?: number; paidAt?: string; raw: unknown }
+
+/** Core: apply a provider confirmation exactly once, after checking amount and currency against the intent. */
+export async function applyProviderEvent(db: Db, ev: ProviderEvent) {
+  const ins = await q(db, `INSERT INTO provider_events (provider, event_id, payload, outcome) VALUES ($1,$2,$3,'received') ON CONFLICT DO NOTHING RETURNING id`, [ev.provider, ev.eventId, ev.raw]);
   if (!ins.length) return { outcome: 'duplicate_event_ignored' };
+  const setOutcome = (o: string) => db.query('UPDATE provider_events SET outcome=$3 WHERE provider=$1 AND event_id=$2', [ev.provider, ev.eventId, o]);
   const rows = await q<Payment>(db, `SELECT * FROM payments WHERE external_ref=$1 AND source='gateway' FOR UPDATE`, [ev.reference]);
-  const setOutcome = (o: string) => db.query('UPDATE provider_events SET outcome=$3 WHERE provider=$1 AND event_id=$2', [provider, ev.eventId, o]);
-  // provider_events is not append-only: outcome is processing metadata, payload is preserved.
   if (!rows.length) { await setOutcome('unknown_reference'); return { outcome: 'unknown_reference' }; }
   const p = rows[0];
   if (p.status !== 'pending') { await setOutcome('already_' + p.status); return { outcome: 'already_' + p.status }; }
@@ -209,9 +232,45 @@ export async function handleWebhook(db: Db, rawBody: string, signature: string |
   await db.query(`UPDATE payments SET status='verified', verified_at=now(), fx_rate=$2, amount_ghs=$3, fee_ghs=$4, paid_on=$5, evidence_note='Confirmed by signed provider callback' WHERE id=$1`,
     [p.id, rate, gross, fee, (ev.paidAt ?? today()).slice(0, 10)]);
   const receipt = await postContribution(db, await one(db, 'SELECT * FROM payments WHERE id=$1', [p.id]), null);
-  await audit(db, null, 'Payment confirmed by provider callback', p.id, `${fmt(gross)} · ${p.external_ref}`);
+  if (!p.member_id && p.payer_email) await notify(db, 'email:' + p.payer_email, ['email'], `Thank you for your gift of ${fmt(gross)} to the PRESEC Class of 2003 classroom block. Receipt ${receipt}.`);
+  await audit(db, null, 'Payment confirmed by provider', p.id, `${fmt(gross)} · ${p.external_ref}`);
   await setOutcome('verified');
   return { outcome: 'verified', receipt };
+}
+
+/* Sandbox events (development and tests): HMAC-SHA256 with PAYMENT_WEBHOOK_SECRET. */
+export const WebhookEvent = z.object({
+  eventId: z.string().min(1), reference: z.string().min(1), status: z.enum(['success', 'failed']),
+  currency: z.enum(['GHS', 'USD', 'GBP']), amount: z.number().int().positive(),
+  settlementRate: z.number().positive().optional(), feeGhs: z.number().int().nonnegative().optional(), paidAt: z.string().optional(),
+});
+/**
+ * Provider callback. Signatures are checked over the exact raw body. Replays are ignored, and
+ * a browser redirect is never treated as proof of payment — only a verified callback is.
+ */
+export async function handleWebhook(db: Db, rawBody: string, signature: string | undefined, provider = 'sandbox') {
+  if (provider === 'paystack') {
+    if (!config.paystackSecret || !signature || !safeEqualHex(hmacHex(config.paystackSecret, rawBody, 'sha512'), signature)) throw new AppError(401, 'bad_signature', 'Invalid webhook signature.');
+    const body = JSON.parse(rawBody);
+    if (body.event !== 'charge.success') return { outcome: 'ignored_' + body.event };
+    // Defence in depth: confirm with Paystack's verify endpoint before posting.
+    const v = await paystack.verify(body.data.reference);
+    return applyProviderEvent(db, { provider, eventId: String(v.id), reference: v.reference, status: v.status === 'success' ? 'success' : 'failed', currency: v.currency, amount: v.amount, feeGhs: v.fees ?? undefined, paidAt: v.paid_at, raw: body });
+  }
+  if (config.env === 'production') throw new AppError(404, 'not_found', 'Unknown provider.');
+  if (!signature || !safeEqualHex(hmacHex(config.webhookSecret, rawBody), signature)) throw new AppError(401, 'bad_signature', 'Invalid webhook signature.');
+  const ev = WebhookEvent.parse(JSON.parse(rawBody));
+  return applyProviderEvent(db, { provider: 'sandbox', ...ev, raw: ev });
+}
+
+/** If a webhook is slow, the return page can ask us to check with the provider directly (idempotent). */
+export async function checkWithProvider(db: Db, reference: string) {
+  const [p] = await q<any>(db, `SELECT provider, status FROM payments WHERE external_ref=$1`, [reference]);
+  if (!p) throw new AppError(404, 'not_found', 'No payment with that reference.');
+  if (p.status !== 'pending' || p.provider !== 'paystack') return paymentStatus(db, reference);
+  const v = await paystack.verify(reference);
+  if (v.status === 'success') await applyProviderEvent(db, { provider: 'paystack', eventId: String(v.id), reference, status: 'success', currency: v.currency, amount: v.amount, feeGhs: v.fees ?? undefined, paidAt: v.paid_at, raw: { verify: v } });
+  return paymentStatus(db, reference);
 }
 
 /* ───────── provider settlement → bank */

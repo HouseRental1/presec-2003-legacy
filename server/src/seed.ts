@@ -193,6 +193,14 @@ export async function seed({ members = 380, quiet = false } = {}) {
     const p3 = await G.createProposal(db, users.akosua, { title: 'Adopt house competition rules v1.1 for the next drive', description: 'Weights 55% target / 45% participation; per-member target GH₵ 1,200. Applies only to the next period.', threshold: 'two_thirds', quorumPct: 30, opensOn: addDays(T, -3), closesOn: addDays(T, 14), linkedType: 'rules', linkedId: '1.1' });
     for (let i = 0; i < n3; i++) await G.castVote(db, fakeMember(voters[i]), p3.id, i < n3 * 0.72 ? 'yes' : i < n3 * 0.93 ? 'no' : 'abstain');
   });
+  // Sample history is already 'delivered'; only new notices go out.
+  await pool.query('UPDATE notifications SET expanded=true');
+  await tx(async (db) => {
+    await db.query(`INSERT INTO announcements (title, body, posted_by) VALUES ('Groundbreaking done', 'Thank you, Ɔdadeɛ 2003. Foundations for our classroom block at PRESEC Legon passed inspection. Next: the structural frame.', $1),
+      ('Founders’ Drive is open', 'The house competition runs until the end of the year. Every classmate who gives, whatever the amount, lifts their house.', $1)`, [users.akosua.userId]);
+    await db.query(`INSERT INTO events (title, starts_at, venue, details, created_by) VALUES ('Ɔdadeɛ 2003 end-of-year reunion', $2, 'PRESEC Legon assembly hall', 'Site tour of the classroom block at 10:00, lunch after.', $1),
+      ('Committee update call (online)', $3, 'Online — link sent by email', 'Treasurer and project manager report; Q&A.', $1)`, [users.akosua.userId, addDays(T, 60) + 'T10:00:00Z', addDays(T, 9) + 'T19:00:00Z']);
+  });
   if (!quiet) console.log(`Seeded ${members} members. Sign in as e.g. ama@presec2003.test / ${DEMO_PASSWORD}`);
   return users;
 }

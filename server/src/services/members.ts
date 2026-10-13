@@ -1,11 +1,18 @@
 import { z } from 'zod';
-import { Actor, Db, q, one, need, audit, conflict, invalid, hashPassword, verifyPassword, newToken, sha256, config, verifyTotp, PRIVILEGED, Role, AppError, newTotpSecret, forbid } from '../lib.js';
+import { Actor, Db, q, one, need, audit, conflict, invalid, hashPassword, verifyPassword, newToken, sha256, config, verifyTotp, PRIVILEGED, Role, AppError, newTotpSecret, forbid, pool } from '../lib.js';
 
 /* ───────── sessions */
-export async function login(db: Db, email: string, password: string, code?: string) {
-  const [u] = await q<any>(db, 'SELECT * FROM users WHERE email=lower($1)', [email.trim()]);
+export async function login(db: Db, email: string, password: string, code?: string, ip?: string) {
+  const e = email.trim().toLowerCase();
+  // Throttle by account across all server instances: 8 failures in 15 minutes locks sign-in for that email.
+  const [{ n: recent }] = await q<any>(db, `SELECT count(*)::int n FROM login_failures WHERE email=$1 AND at > now() - interval '15 minutes'`, [e]);
+  if (recent >= 8) throw new AppError(429, 'locked', 'Too many failed attempts. Wait 15 minutes or reset your password.');
+  const [u] = await q<any>(db, 'SELECT * FROM users WHERE email=$1', [e]);
   // Same message for unknown email and wrong password, so accounts can't be discovered.
-  if (!u || !(await verifyPassword(password, u.password_hash))) throw new AppError(401, 'bad_login', 'Email or password is incorrect.');
+  if (!u || !(await verifyPassword(password, u.password_hash))) {
+    await pool.query('INSERT INTO login_failures (email, ip) VALUES ($1,$2)', [e, ip ?? null]); // outside the transaction so it survives the rollback
+    throw new AppError(401, 'bad_login', 'Email or password is incorrect.');
+  }
   if (u.status !== 'active') throw new AppError(403, 'suspended', 'This account is suspended. Contact the membership administrator.');
   const roles = (await q<any>(db, 'SELECT role FROM user_roles WHERE user_id=$1 AND (expires_at IS NULL OR expires_at > now())', [u.id])).map((r) => r.role as Role);
   const privileged = roles.some((r) => PRIVILEGED.includes(r));

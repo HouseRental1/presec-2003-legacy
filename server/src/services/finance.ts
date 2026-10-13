@@ -113,7 +113,8 @@ export async function listRequests(db: Db | any, actor: Actor) {
     LEFT JOIN request_decisions d ON d.request_id=r.id LEFT JOIN users du ON du.id=d.user_id
     GROUP BY r.id, s.name, u.display_name ORDER BY r.created_at DESC`);
   const certificates = await q<any>(db, `SELECT c.*, (SELECT status FROM payment_requests WHERE certificate_id=c.id) request_status FROM payment_certificates c ORDER BY id`);
-  return { requests: rows, certificates };
+  const [con] = await q<any>(db, `SELECT c.id, s.name FROM contracts c JOIN suppliers s ON s.id=c.supplier_id ORDER BY c.signed_on DESC LIMIT 1`);
+  return { requests: rows, certificates, contractId: con?.id ?? null, contractor: con?.name ?? null };
 }
 
 /* ───────── dashboard figures — all derived from the ledger, pledges and approvals */

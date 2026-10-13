@@ -14,6 +14,18 @@ export const config = {
   webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET ?? 'dev-webhook-secret',
   sessionHours: Number(process.env.SESSION_HOURS ?? 12),
   loginRateMax: Number(process.env.LOGIN_RATE_MAX ?? 10),   // sign-in attempts per IP per minute
+  appUrl: process.env.APP_URL ?? 'http://localhost:5173',          // public URL of the web app (links in messages, payment return)
+  paymentProvider: (process.env.PAYMENT_PROVIDER ?? 'sandbox') as 'sandbox' | 'paystack',
+  paystackSecret: process.env.PAYSTACK_SECRET_KEY ?? '',
+  paystackApi: process.env.PAYSTACK_API ?? 'https://api.paystack.co',
+  smsProvider: (process.env.SMS_PROVIDER ?? 'log') as 'log' | 'arkesel' | 'hubtel',
+  smsSender: process.env.SMS_SENDER_ID ?? 'PRESEC03',
+  arkeselKey: process.env.ARKESEL_API_KEY ?? '',
+  hubtelClientId: process.env.HUBTEL_CLIENT_ID ?? '', hubtelClientSecret: process.env.HUBTEL_CLIENT_SECRET ?? '',
+  emailProvider: (process.env.EMAIL_PROVIDER ?? 'log') as 'log' | 'resend',
+  resendKey: process.env.RESEND_API_KEY ?? '', emailFrom: process.env.EMAIL_FROM ?? 'Class of 2003 Legacy <no-reply@example.org>',
+  cronSecret: process.env.CRON_SECRET ?? '',
+  dbPoolMax: Number(process.env.DB_POOL_MAX ?? 10),
 };
 
 /* ───────────────────────── database */
@@ -21,7 +33,7 @@ pg.types.setTypeParser(20, (v) => Number(v));      // int8 → number (pesewas f
 pg.types.setTypeParser(1700, (v) => Number(v));    // numeric → number (fx rates only)
 pg.types.setTypeParser(1082, (v) => v);            // date stays 'YYYY-MM-DD'
 
-export const pool = new pg.Pool({ connectionString: config.databaseUrl, max: 10 });
+export const pool = new pg.Pool({ connectionString: config.databaseUrl, max: config.dbPoolMax, ssl: /sslmode=require|neon\.tech/.test(config.databaseUrl) ? { rejectUnauthorized: true } : undefined });
 export type Db = pg.PoolClient;
 
 /** Run fn in a SERIALIZABLE-safe transaction; everything inside succeeds or fails together. */
@@ -99,7 +111,7 @@ export function verifyTotp(secret: string, code: string): boolean {
   const now = Date.now();
   return [-1, 0, 1].some((w) => totp(secret, now + w * 30_000) === code);
 }
-export function hmacHex(secret: string, body: string) { return createHmac('sha256', secret).update(body).digest('hex'); }
+export function hmacHex(secret: string, body: string, algo: 'sha256' | 'sha512' = 'sha256') { return createHmac(algo, secret).update(body).digest('hex'); }
 export function safeEqualHex(a: string, b: string) {
   const x = Buffer.from(a, 'hex'), y = Buffer.from(b, 'hex');
   return x.length === y.length && x.length > 0 && timingSafeEqual(x, y);
@@ -156,8 +168,11 @@ export async function verifyAuditChain(db: Db | pg.Pool): Promise<{ ok: boolean;
 }
 
 /* ───────────────────────── notifications */
-export async function notify(db: Db, audience: string, channels: string[], body: string) {
-  await db.query('INSERT INTO notifications (audience, channels, body) VALUES ($1,$2,$3)', [audience, channels, body]);
+export type NoticeKind = 'payment' | 'governance' | 'security' | 'reminder' | 'general';
+/** Queue a notice. Delivery (SMS/email) happens in the dispatcher, which applies member preferences by kind. */
+export async function notify(db: Db, audience: string, channels: string[], body: string, kind?: NoticeKind) {
+  const k: NoticeKind = kind ?? (/^Payment received|Receipt|Thank you for your gift/.test(body) ? 'payment' : /^Ballot|Voting/.test(body) ? 'governance' : /reminder|yet to give/i.test(body) ? 'reminder' : 'general');
+  await db.query('INSERT INTO notifications (audience, channels, body, kind) VALUES ($1,$2,$3,$4)', [audience, channels, body, k]);
 }
 
 /* ───────────────────────── settings */

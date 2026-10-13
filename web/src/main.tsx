@@ -11,16 +11,23 @@ import Project from './pages/Project';
 import Votes from './pages/Votes';
 import Members from './pages/Members';
 import { Audit, Legacy, Notifications } from './pages/Other';
+import { Give, PayReturn, SetPassword } from './pages/Public';
+import Profile from './pages/Profile';
+import Community from './pages/Community';
+import Admin from './pages/Admin';
+import { Link, useLocation } from 'react-router-dom';
 
 const NAV: [string, string, string?][] = [
   ['/', 'Home'], ['/money', 'Money'], ['/houses', 'Houses'], ['/project', 'Classroom project', 'proj.view'], ['/votes', 'Votes', 'vote'],
-  ['/members', 'Year group', 'dir'], ['/legacy', 'Legacy archive', 'proj.view'], ['/notifications', 'Notifications'], ['/audit', 'Audit trail', 'audit.view'],
+  ['/members', 'Year group', 'dir'], ['/community', 'News & events', 'own'], ['/legacy', 'Legacy archive', 'proj.view'], ['/notifications', 'Notifications'],
+  ['/audit', 'Audit trail', 'audit.view'], ['/admin', 'Administration', 'admin'], ['/give', 'Public page'],
 ];
 
 function Login() {
   const { reload } = useSession();
   const [email, setEmail] = useState(''), [password, setPassword] = useState(''), [code, setCode] = useState('');
-  const [needCode, setNeedCode] = useState(false), [err, setErr] = useState(''), [busy, setBusy] = useState(false);
+  const [needCode, setNeedCode] = useState(false), [err, setErr] = useState(''), [busy, setBusy] = useState(false), [sent, setSent] = useState(false);
+  const forgot = async () => { if (!email) return setErr('Enter your email first.'); await api.post('/auth/forgot', { email }).catch(() => {}); setSent(true); setErr(''); };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setErr('');
     try { await api.post('/auth/login', { email, password, ...(code ? { code } : {}) }); await reload(); }
@@ -34,14 +41,21 @@ function Login() {
     {needCode && <label className="f" htmlFor="cd">Authenticator code<input id="cd" inputMode="numeric" pattern="\d{6}" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} /></label>}
     {err && <div className="callout bad">{err}</div>}
     <button className="btn primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+    <div className="row between"><button type="button" className="btn sm" onClick={forgot}>Forgot password?</button><Link to="/give" className="small">Public page</Link></div>
+    {sent && <div className="callout ok">If that email is registered, a reset link is on its way by email and SMS.</div>}
     <p className="def">Development sample accounts: ama, kofi, efua, yaw, nana, abena, kwame, akosua, gifty @presec2003.test · password Legacy-demo-2026</p>
   </form></div>;
 }
 
 function Shell() {
   const { me, can, signOut } = useSession();
+  const loc = useLocation();
+  if (loc.pathname === '/give') return <Give />;
+  if (loc.pathname === '/pay/return') return <PayReturn />;
+  if (loc.pathname === '/set-password') return <SetPassword />;
   if (!me) return <Login />;
-  const items = NAV.filter(([, , p]) => !p || can(p));
+  const isAdmin = can('admin.members') || can('rules.edit') || can('gov.manage') || can('reports');
+  const items = NAV.filter(([, , p]) => !p || (p === 'admin' ? isAdmin : can(p)));
   return <div className="app">
     <aside className="rail" aria-label="Main navigation">
       <div className="brandmark"><div className="seal">03</div><div><b>Class of 2003 Legacy</b><span>PRESEC Legon · Ɔdadeɛ 2003</span></div></div>
@@ -49,12 +63,13 @@ function Shell() {
     </aside>
     <main className="main">
       <div className="topbar">
-        <div><b>{me.name}</b> <span className="muted small">{me.roles.join(' · ')}{me.member ? ' · ' + me.member.member_no : ''}</span></div>
-        <div className="row">{me.mfaRequired && !me.mfaPassed && me.roles.some((r) => r !== 'member') && <a className="pill warn" href="/notifications">Two-factor needed for staff actions</a>}<button className="btn sm" onClick={signOut}>Sign out</button></div>
+        <Link to="/profile" style={{ color: 'inherit', textDecoration: 'none' }}><b>{me.name}</b> <span className="muted small">{me.roles.join(' · ')}{me.member ? ' · ' + me.member.member_no : ''}</span></Link>
+        <div className="row">{me.mfaRequired && !me.mfaPassed && me.roles.some((r) => r !== 'member') && <Link className="pill warn" to="/profile">Set up two-factor sign-in</Link>}<button className="btn sm" onClick={signOut}>Sign out</button></div>
       </div>
       <Routes>
         <Route path="/" element={<Home />} /><Route path="/money" element={<Money />} /><Route path="/houses" element={<Houses />} />
         <Route path="/project" element={<Project />} /><Route path="/votes" element={<Votes />} /><Route path="/members" element={<Members />} />
+        <Route path="/profile" element={<Profile />} /><Route path="/community" element={<Community />} /><Route path="/admin" element={<Admin />} />
         <Route path="/legacy" element={<Legacy />} /><Route path="/notifications" element={<Notifications />} /><Route path="/audit" element={<Audit />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
