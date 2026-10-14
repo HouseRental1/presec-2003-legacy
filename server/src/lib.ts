@@ -128,7 +128,7 @@ export const PERMS: Record<Role, string[]> = {
   auditor: ['fin.view', 'audit.view', 'reports', 'proj.view'],
   pm: ['proj.edit', 'req.create', 'proj.view'],
   committee: ['req.approve', 'var.approve', 'proj.verify', 'gov.manage', 'fin.view', 'reports', 'rules.edit', 'proj.view'],
-  admin: ['admin.members', 'audit.view'],
+  admin: ['admin.members', 'audit.view', 'proj.view', 'dir'],   // plus read-only access to the project and directory
   school: ['proj.view'],
 };
 /** Roles whose actions need a passed MFA check when MFA is enforced. */
