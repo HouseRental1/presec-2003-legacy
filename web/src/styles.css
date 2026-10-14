@@ -110,3 +110,4 @@ label.f input,label.f select,label.f textarea{border:1px solid var(--line);backg
 .house-card .hno{font-size:.7rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--hc)}
 .show-sm{display:none}
 @media (max-width:640px){.hide-sm{display:none}.show-sm{display:block}}
+.signup-cta{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:10px;background:var(--surface-2)}

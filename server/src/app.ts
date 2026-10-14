@@ -15,6 +15,7 @@ import * as C from './services/competition.js';
 import * as J from './services/project.js';
 import * as G from './services/governance.js';
 import * as L from './services/legacy.js';
+import * as SU from './services/signup.js';
 import * as A from './services/accounts.js';
 import * as K from './services/community.js';
 import * as S from './services/setup.js';
@@ -229,6 +230,12 @@ export async function buildApp() {
   app.get('/api/admin/staff', read((a) => A.listStaff(pool, a)));
   app.post('/api/admin/import-members', write(A.ImportMembersInput, (db, a, b) => A.importMembers(db, a, b)));
   app.post('/api/admin/members/:id/invite', write(null, (db, a, _b, r) => A.resendInvite(db, a, id(r))));
+  app.post('/api/signup', { config: { rateLimit: { max: 5, timeWindow: '10 minutes' } } }, async (req) => {
+    const b = SU.SignupInput.parse(req.body);
+    return tx((db) => SU.requestSignup(db, b, req.ip));
+  });
+  app.get('/api/admin/signups', read((a, req) => SU.listSignups(pool, a, (req.query as any).status ?? 'pending')));
+  app.post('/api/admin/signups/:id/decision', write(SU.DecisionInput, (db, a, b, r) => SU.decideSignup(db, a, Number(id(r)), b)));
   app.post('/api/admin/access', write(A.AccessInput, (db, a, b) => A.setAccess(db, a, b)));
   app.post('/api/admin/participation', write(A.ParticipationInput, (db, a, b) => A.setParticipation(db, a, b)));
   app.post('/api/admin/roles', write(z.object({ userId: z.string().uuid(), role: z.enum(['admin', 'committee', 'treasurer', 'approver', 'auditor', 'pm', 'captain', 'school']), grant: z.boolean(), expiresAt: z.string().optional() }),

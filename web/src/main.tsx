@@ -2,7 +2,7 @@ import { Component, ReactNode, StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import './styles.css';
-import { api, ApiError } from './api';
+import { api, ApiError, HOUSE_NAME } from './api';
 import { SessionProvider, ToastProvider, useSession } from './ui';
 import Home from './pages/Home';
 import Money from './pages/Money';
@@ -56,12 +56,47 @@ function FirstAdmin({ onDone, recover = false, onCancel }: { onDone: () => void;
   </form></div>;
 }
 
+const HOUSE_CHOICES = Object.entries(HOUSE_NAME) as [string, string][];
+/** Request access: the classmate chooses their own password; an administrator approves before they can sign in. */
+function Signup({ onDone, onCancel }: { onDone: (email: string) => void; onCancel: () => void }) {
+  const [f, setF] = useState({ fullName: '', email: '', phone: '', houseId: '', city: '', profession: '', note: '', password: '', password2: '', website: '' });
+  const [err, setErr] = useState(''), [busy, setBusy] = useState(false);
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault(); setErr('');
+    if (f.password !== f.password2) return setErr('The two passwords do not match.');
+    if (!f.houseId) return setErr('Choose your house.');
+    setBusy(true);
+    try { const { password2, ...body } = f; await api.post('/signup', body); onDone(f.email.trim()); }
+    catch (x) { setErr((x as Error).message.replace(/^\w+: /, '').replace(/; \w+: /g, ' ')); } finally { setBusy(false); }
+  };
+  return <div className="login"><form className="card stack" onSubmit={submit} style={{ maxWidth: 520 }}>
+    <div className="row"><div className="seal">03</div><div><h1 style={{ fontSize: '1.25rem' }}>Request access</h1><p className="muted small">For the PRESEC Legon Ɔdadeɛ 2003 year group</p></div></div>
+    <p className="small" style={{ margin: 0 }}>Fill this in and an administrator will approve your account, usually after checking with your house. You choose your password now and use it once approved.</p>
+    <div className="fgrid">
+      <label className="f" htmlFor="su1">Full name<input id="su1" required autoComplete="name" value={f.fullName} onChange={set('fullName')} /></label>
+      <label className="f" htmlFor="su2">Email<input id="su2" type="email" required autoComplete="email" value={f.email} onChange={set('email')} /></label>
+      <label className="f" htmlFor="su3">Your house at PRESEC<select id="su3" required value={f.houseId} onChange={set('houseId')}><option value="">Choose…</option>{HOUSE_CHOICES.map(([id, n]) => <option key={id} value={id}>{n}</option>)}</select></label>
+      <label className="f" htmlFor="su4">Phone (optional)<input id="su4" type="tel" autoComplete="tel" value={f.phone} onChange={set('phone')} /></label>
+      <label className="f" htmlFor="su5">City / country (optional)<input id="su5" value={f.city} onChange={set('city')} /></label>
+      <label className="f" htmlFor="su6">Profession (optional)<input id="su6" value={f.profession} onChange={set('profession')} /></label>
+      <label className="f" htmlFor="su7" style={{ gridColumn: '1 / -1' }}>Anything that helps us confirm you (optional)<textarea id="su7" rows={2} placeholder="e.g. form class, nickname, housemaster" value={f.note} onChange={set('note')} /></label>
+      <label className="f" htmlFor="su8">Choose a password<input id="su8" type="password" required minLength={10} autoComplete="new-password" value={f.password} onChange={set('password')} /><span className="def">At least 10 characters.</span></label>
+      <label className="f" htmlFor="su9">Repeat password<input id="su9" type="password" required autoComplete="new-password" value={f.password2} onChange={set('password2')} /></label>
+    </div>
+    <input tabIndex={-1} autoComplete="off" aria-hidden="true" value={f.website} onChange={set('website')} style={{ position: 'absolute', left: '-9999px', width: 1, height: 1 }} name="website" />
+    {err && <div className="callout bad">{err}</div>}
+    <button className="btn primary" disabled={busy}>{busy ? 'Sending…' : 'Send request'}</button>
+    <button type="button" className="btn" onClick={onCancel}>Back to sign in</button>
+  </form></div>;
+}
+
 /** Set on a successful sign-in so the layout can send the person to their own area once. */
 let justSignedIn = false;
 
 function Login() {
   const [setup, setSetup] = useState<{ database: string; needsSetup: boolean; canRecover?: boolean } | null>(null);
-  const [created, setCreated] = useState(false), [recovering, setRecovering] = useState(false);
+  const [created, setCreated] = useState(false), [recovering, setRecovering] = useState(false), [signingUp, setSigningUp] = useState(false), [requested, setRequested] = useState(false);
   useEffect(() => { api.get('/setup/status').then(setSetup).catch(() => setSetup({ database: 'unreachable', needsSetup: false })); }, []);
   const { reload } = useSession();
   const [email, setEmail] = useState(''), [password, setPassword] = useState(''), [code, setCode] = useState('');
@@ -79,9 +114,11 @@ function Login() {
     finally { setBusy(false); }
   };
   if (setup?.needsSetup && !created) return <FirstAdmin onDone={() => { setCreated(true); setErr(''); }} />;
+  if (signingUp) return <Signup onDone={(e) => { setSigningUp(false); setEmail(e); setRequested(true); setErr(''); }} onCancel={() => setSigningUp(false)} />;
   if (recovering) return <FirstAdmin recover onDone={() => { setRecovering(false); setCreated(true); setErr(''); }} onCancel={() => setRecovering(false)} />;
   return <div className="login"><form className="card stack" onSubmit={submit}>
     {created && <div className="callout ok">Administrator account saved. Sign in with that email and password.</div>}
+    {requested && <div className="callout ok"><b>Request sent.</b> An administrator will check you are in the 2003 year group and approve your account. Once approved, sign in here with your email and the password you chose.</div>}
     {setup && setup.database !== 'ready' && <div className="callout bad">{setup.database === 'not_migrated' ? 'The database tables have not been created yet. In Vercel, redeploy the latest deployment and check the build log for “applied 003_platform.sql”.' : 'The app cannot reach its database. In Vercel, check that DATABASE_URL is set (Storage → Neon) and redeploy.'}</div>}
     <div className="row"><div className="seal">03</div><div><h1 style={{ fontSize: '1.25rem' }}>Class of 2003 Legacy</h1><p className="muted small">PRESEC Legon · Ɔdadeɛ 2003 year group</p></div></div>
     <label className="f" htmlFor="em">Email<input id="em" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
@@ -89,6 +126,7 @@ function Login() {
     {needCode && <label className="f" htmlFor="cd">Authenticator code<input id="cd" inputMode="numeric" pattern="\d{6}" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} /></label>}
     {err && <div className="callout bad">{err}</div>}
     <button className="btn primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
+    {!setup?.needsSetup && <div className="signup-cta"><span className="small muted">Ɔdadeɛ 2003 and not signed up yet?</span><button type="button" className="btn" onClick={() => setSigningUp(true)}>Request access</button></div>}
     <div className="row between"><button type="button" className="btn sm" onClick={forgot}>Forgot password?</button><Link to="/give" className="small">Public page</Link></div>
     {sent && <div className="callout ok">If that email is registered, a reset link is on its way by email and SMS.</div>}
     {setup?.canRecover && <button type="button" className="btn sm" onClick={() => setRecovering(true)}>Locked out during set-up? Reset the administrator account</button>}

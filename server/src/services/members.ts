@@ -9,6 +9,12 @@ export async function login(db: Db, email: string, password: string, code?: stri
   if (recent >= 8) throw new AppError(429, 'locked', 'Too many failed attempts. Wait 15 minutes or reset your password.');
   const [u] = await q<any>(db, 'SELECT * FROM users WHERE email=$1', [e]);
   // Same message for unknown email and wrong password, so accounts can't be discovered.
+  if (!u) {
+    // A sign-up still waiting for approval: say so (only when the password matches what they chose).
+    const [sr] = await q<any>(db, `SELECT status, password_hash FROM signup_requests WHERE email=$1 ORDER BY created_at DESC LIMIT 1`, [e]);
+    if (sr && sr.status !== 'approved' && (await verifyPassword(password, sr.password_hash)))
+      throw new AppError(403, sr.status === 'pending' ? 'awaiting_approval' : 'signup_declined', sr.status === 'pending' ? 'Your sign-up is waiting for an administrator to approve it. Try again once you hear back.' : 'Your sign-up request was not approved. Please contact the committee.');
+  }
   if (!u || !(await verifyPassword(password, u.password_hash))) {
     await pool.query('INSERT INTO login_failures (email, ip) VALUES ($1,$2)', [e, ip ?? null]); // outside the transaction so it survives the rollback
     throw new AppError(401, 'bad_login', 'Email or password is incorrect.');

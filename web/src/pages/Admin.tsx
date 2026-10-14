@@ -8,12 +8,15 @@ const ROLES: [string, string][] = [['committee', 'Executive committee'], ['treas
 
 export default function Admin() {
   const { can } = useSession();
-  const tabs = ([['register', 'Year-group register', can('admin.members')], ['staff', 'Access & captains', can('admin.members')], ['controls', 'Controls & rules', can('rules.edit')], ['ballots', 'Ballots', can('gov.manage')], ['project', 'Project set-up', can('rules.edit') || can('proj.edit')], ['exports', 'Exports', can('reports') || can('admin.members')]] as const).filter((t) => t[2]);
-  const [tab, setTab] = useState<string>(tabs[0]?.[0] ?? '');
+  const su = useLoad<any[]>(can('admin.members') ? '/admin/signups' : '/me');
+  const pending = Array.isArray(su.data) ? su.data.length : 0;
+  const tabs = ([['signups', pending ? `Sign-up requests (${pending})` : 'Sign-up requests', can('admin.members')], ['register', 'Year-group register', can('admin.members')], ['staff', 'Access & captains', can('admin.members')], ['controls', 'Controls & rules', can('rules.edit')], ['ballots', 'Ballots', can('gov.manage')], ['project', 'Project set-up', can('rules.edit') || can('proj.edit')], ['exports', 'Exports', can('reports') || can('admin.members')]] as const).filter((t) => t[2]);
+  const [tab, setTab] = useState<string>('');
+  const current = tab || (pending ? 'signups' : tabs.find((t) => t[0] !== 'signups')?.[0] ?? '');
   if (!tabs.length) return <div className="callout warn">Administration is for the committee, the administrator and finance roles.</div>;
   return <div className="stack"><div><div className="eyebrow">Run by the committee for the year group</div><h1>Administration</h1></div>
-    <div className="tabs" role="tablist">{tabs.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}</div>
-    {tab === 'register' && <Register />}{tab === 'staff' && <Staff />}{tab === 'controls' && <Controls />}{tab === 'ballots' && <Ballots />}{tab === 'project' && <ProjectSetup />}{tab === 'exports' && <Exports />}</div>;
+    <div className="tabs" role="tablist">{tabs.map(([k, l]) => <button key={k} role="tab" aria-selected={current === k} onClick={() => setTab(k)}>{l}</button>)}</div>
+    {current === 'signups' && <Signups onChange={su.reload} />}{current === 'register' && <Register />}{current === 'staff' && <Staff />}{current === 'controls' && <Controls />}{current === 'ballots' && <Ballots />}{current === 'project' && <ProjectSetup />}{current === 'exports' && <Exports />}</div>;
 }
 
 function Register() {
@@ -34,6 +37,29 @@ function Register() {
       <b>Invitation links to share</b><p className="small muted" style={{ margin: 0 }}>Email and SMS are not connected yet, so share each link yourself (each works once, for 14 days).</p>
       <textarea readOnly rows={Math.min(10, res.invites.length + 1)} className="mono" style={{ width: '100%' }} value={res.invites.map((i: any) => `${i.name}: ${i.link}`).join('\n')} onFocus={(e) => e.target.select()} /></div>}
     <p className="def">Houses: {HOUSE_OPTS.map(([, n]) => n).join(' · ')}</p></div></div>;
+}
+
+/** Classmates who asked for access from the sign-in page. Approving creates their account in the house they chose (or a corrected one). */
+function Signups({ onChange }: { onChange: () => void }) {
+  const [view, setView] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  const l = useLoad<any[]>(`/admin/signups?status=${view}`); const toast = useToast(); const [dialog, open] = useDialog();
+  const done = (m: string) => { toast(m); l.reload(); onChange(); };
+  return <div className="stack">{dialog}
+    <div className="row" style={{ flexWrap: 'wrap' }}>{(['pending', 'approved', 'rejected'] as const).map((v) => <button key={v} className={'btn sm' + (view === v ? ' primary' : '')} onClick={() => setView(v)}>{v === 'pending' ? 'Waiting' : v === 'approved' ? 'Approved' : 'Declined'}</button>)}</div>
+    <Gate error={l.error}>{!(l.data ?? []).length ? <div className="card"><p className="muted small" style={{ margin: 0 }}>{view === 'pending' ? 'No one is waiting. New requests from the “Request access” button on the sign-in page appear here.' : 'Nothing here yet.'}</p></div> :
+      (l.data ?? []).map((r) => <div className="card stack" key={r.id} style={{ gap: 8 }}>
+        <div className="row between" style={{ flexWrap: 'wrap', gap: 8 }}><div><b>{r.full_name}</b> <span className="muted small">· {r.email}{r.phone ? ' · ' + r.phone : ''}</span></div><span className="muted small">{new Date(r.created_at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</span></div>
+        <div className="small">{HOUSE_NAME[r.house_id] ?? 'No house given'}{r.city ? ' · ' + r.city : ''}{r.profession ? ' · ' + r.profession : ''}</div>
+        {r.note && <div className="small" style={{ background: 'var(--surface-2)', padding: '8px 10px', borderRadius: 8 }}>“{r.note}”</div>}
+        {view === 'pending' ? <div className="row" style={{ flexWrap: 'wrap' }}>
+          <button className="btn primary" onClick={() => open({ title: `Approve ${r.full_name}`, submit: 'Approve', intro: <p className="small muted">They become a member (view-only, can pledge and pay) and can sign in straight away with the password they chose.</p>,
+            fields: [{ name: 'houseId', label: 'House', type: 'select', options: HOUSE_OPTS, value: r.house_id ?? 'H1', hint: 'Correct it here if they chose the wrong house.' }],
+            onSubmit: async (v) => { const x = await api.post<any>(`/admin/signups/${r.id}/decision`, { approve: true, houseId: v.houseId }); done(`${r.full_name} approved as ${x.memberNo}.`); } })}>Approve</button>
+          <button className="btn danger" onClick={() => open({ title: `Decline ${r.full_name}`, submit: 'Decline', fields: [{ name: 'note', label: 'Reason (kept for the record)', value: '' }],
+            onSubmit: async (v) => { await api.post(`/admin/signups/${r.id}/decision`, { approve: false, note: v.note }); done('Request declined.'); } })}>Decline</button>
+        </div> : <div className="def">{view === 'approved' ? `Approved as ${r.member_no}` : 'Declined'} by {r.decided_by} · {r.decided_at ? new Date(r.decided_at).toLocaleDateString('en-GB') : ''}{r.decision_note ? ' · ' + r.decision_note : ''}</div>}
+      </div>)}</Gate>
+  </div>;
 }
 
 function Staff() {

@@ -64,3 +64,34 @@ describe('invitation links for administrators', () => {
     expect(again.json().link).toMatch(/set-password\?token=/);
   });
 });
+
+describe('sign-up with administrator approval', () => {
+  const apply = (p: any) => app.inject({ method: 'POST', url: '/api/signup', payload: { fullName: 'Yaw Sign Up', email: 'yaw.signup@example.org', houseId: 'H5', password: 'yaw-password-1', city: 'Kumasi', ...p } });
+  const signIn = (password = 'yaw-password-1') => app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'yaw.signup@example.org', password } });
+  it('accepts a request; the applicant cannot sign in until approved', async () => {
+    expect((await apply({})).statusCode).toBe(200);
+    expect((await apply({})).statusCode).toBe(200);                       // repeat is harmless
+    const w = await signIn(); expect(w.statusCode).toBe(403); expect(w.json().message).toMatch(/waiting for an administrator/);
+    expect((await signIn('wrong-password-9')).statusCode).toBe(401);       // no hint without the right password
+    expect((await apply({ email: 'bad', password: 'short' })).statusCode).toBe(400);
+  });
+  it('members cannot review requests; an administrator approves into a house', async () => {
+    const K = await login('kofi@example.org');
+    expect((await get('/api/admin/signups', K)).statusCode).toBe(403);
+    const list = (await get('/api/admin/signups', A)).json();
+    const req = list.find((s: any) => s.email === 'yaw.signup@example.org'); expect(req).toMatchObject({ house_id: 'H5', city: 'Kumasi' });
+    const d = await post(`/api/admin/signups/${req.id}/decision`, { approve: true, houseId: 'H6' }, A);
+    expect(d.statusCode, d.body).toBe(200);
+    const s = await signIn(); expect(s.statusCode).toBe(200);
+    const me = (await get('/api/me', { authorization: 'Bearer ' + s.json().token })).json();
+    expect(me).toMatchObject({ access: 'member', member: { house_id: 'H6' } });
+    expect((await post(`/api/admin/signups/${req.id}/decision`, { approve: false }, A)).statusCode).toBe(409);
+  });
+  it('a declined applicant is told so', async () => {
+    await apply({ email: 'nope@example.org', password: 'nope-password-1' });
+    const req = (await get('/api/admin/signups', A)).json().find((s: any) => s.email === 'nope@example.org');
+    expect((await post(`/api/admin/signups/${req.id}/decision`, { approve: false, note: 'Not in the 2003 year group' }, A)).statusCode).toBe(200);
+    const r = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'nope@example.org', password: 'nope-password-1' } });
+    expect(r.statusCode).toBe(403); expect(r.json().message).toMatch(/not approved/);
+  });
+});
