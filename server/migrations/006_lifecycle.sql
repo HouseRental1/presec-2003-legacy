@@ -85,7 +85,6 @@ BEGIN
     (p,'planning',6,'Baseline schedule (programme of works)'),
     (p,'procurement',1,'Scope of works and tender documents'),
     (p,'procurement',2,'At least three bids received'),
-    (p,'procurement',3,'Conflict-of-interest declarations from evaluators'),
     (p,'procurement',4,'Bid evaluation report'),
     (p,'procurement',5,'Contract award approved (member vote)'),
     (p,'procurement',6,'Contract signed and recorded'),

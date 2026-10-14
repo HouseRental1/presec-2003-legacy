@@ -114,7 +114,5 @@ export async function overview(db: Db | any, actor: Actor) {
     defects: await q(db, 'SELECT * FROM defects ORDER BY id'),
     risks: await q(db, 'SELECT * FROM risks ORDER BY id'),
     photos: await q(db, `SELECT pe.wp_id, pe.stage, pe.pct, pe.recorded_at, pe.file_id FROM progress_events pe WHERE pe.file_id IS NOT NULL ORDER BY pe.id DESC LIMIT 24`),
-    coi: await q(db, `SELECT c.id, c.interest, c.action, c.declared_at, s.name supplier, coalesce(u.display_name, m.full_name) person
-      FROM coi_declarations c JOIN suppliers s ON s.id=c.supplier_id LEFT JOIN users u ON u.id=c.user_id LEFT JOIN members m ON m.id=c.member_id ORDER BY c.id`),
   };
 }
