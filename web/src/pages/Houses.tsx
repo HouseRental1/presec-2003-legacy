@@ -53,7 +53,7 @@ export default function Houses() {
     <div className="house-grid">{hs.data.map((h) => {
       const r = standing[h.id];
       return <button key={h.id} className={'house-card' + (sel === h.id ? ' on' : '')} style={{ ['--hc' as any]: HOUSE_COLOR[h.id] }} onClick={() => setSel(h.id)} aria-pressed={sel === h.id}>
-        <span className="row between" style={{ width: '100%' }}><b className="hn">{h.name}</b>{r && <span className="rank">#{r.rank}</span>}</span>
+        <span className="row between" style={{ width: '100%' }}><b className="hn">{HOUSE_NAME[h.id] ?? h.name}</b>{r && <span className="rank">#{r.rank}</span>}</span>
         {h.motto && <span className="small muted motto">{h.motto}</span>}
         <span className="small"><b className="num">{h.members}</b> member{h.members === 1 ? '' : 's'}{me?.member?.house_id === h.id ? ' · your house' : ''}</span>
         <span className="small muted">{h.captains.length ? 'Captain: ' + h.captains.join(', ') : 'No captain yet'}</span>
@@ -65,10 +65,10 @@ export default function Houses() {
       <div className="row between" style={{ flexWrap: 'wrap', gap: 10 }}>
         <div><h2 style={{ margin: 0 }}><House id={house.id} /></h2>{house.motto && <div className="muted small" style={{ fontStyle: 'italic' }}>{house.motto}</div>}</div>
         {admin && <div className="row" style={{ flexWrap: 'wrap' }}>
-          <button className="btn sm" onClick={() => open({ title: `${house.name} house profile`, submit: 'Save', fields: [{ name: 'motto', label: 'Motto or slogan', value: house.motto ?? '' }, { name: 'about', label: 'About the house', type: 'textarea', value: house.about ?? '', hint: 'Who it is named after, house colours, housemasters in our time, memories.' }],
+          <button className="btn sm" onClick={() => open({ title: `${HOUSE_NAME[house.id]} profile`, submit: 'Save', fields: [{ name: 'motto', label: 'Motto or slogan', value: house.motto ?? '' }, { name: 'about', label: 'About the house', type: 'textarea', value: house.about ?? '', hint: 'Who it is named after, house colours, housemasters in our time, memories.' }],
             onSubmit: async (v) => { await api.post(`/houses/${house.id}`, v); toast('House profile saved.'); refresh(); } })}>Edit profile</button>
           <button className="btn sm" onClick={() => addClassmate(house.id)}>Add classmate</button>
-          {house.members > 0 && <button className="btn sm" onClick={() => open({ title: `Appoint the ${house.name} captain`, submit: 'Appoint', intro: <p className="small muted">The captain sees which housemates have not yet contributed (names only) and can send reminders. They need an account, so add their email first.</p>,
+          {house.members > 0 && <button className="btn sm" onClick={() => open({ title: `Appoint the ${HOUSE_NAME[house.id]} captain`, submit: 'Appoint', intro: <p className="small muted">The captain sees which housemates have not yet contributed (names only) and can send reminders. They need an account, so add their email first.</p>,
             fields: [{ name: 'memberNo', label: 'Member number', required: true, hint: 'Shown next to each name in the list below.' }],
             onSubmit: async (v) => { await api.post('/admin/captains', { houseId: house.id, memberNo: v.memberNo }); toast('Captain appointed.'); refresh(); } })}>Appoint captain</button>}
         </div>}

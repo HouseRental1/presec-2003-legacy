@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { api, ghs, HOUSE_NAME, today } from '../api';
+import { api, ghs, HOUSE_NAME, houseIdFrom, today } from '../api';
 import { useDialog, downloadCsv } from '../forms';
 import { Gate, Pill, useAction, useLoad, useSession, useToast } from '../ui';
 
@@ -22,16 +22,15 @@ function Register() {
   const act = useAction();
   const parse = () => {
     const [head, ...lines] = text.trim().split(/\r?\n/); const cols = head.split(',').map((c) => c.trim().toLowerCase());
-    const byName = Object.fromEntries(HOUSE_OPTS.map(([id, n]) => [n.toLowerCase(), id]));
     return lines.filter(Boolean).map((l) => { const c = l.split(',').map((x) => x.trim()); const g = (k: string) => c[cols.indexOf(k)] ?? '';
-      const house = g('house'); return { memberNo: g('member_no'), fullName: g('full_name'), houseId: byName[house.toLowerCase()] ?? house, email: g('email') || undefined, phone: g('phone') || undefined, city: g('city') || undefined }; });
+      const house = g('house'); return { memberNo: g('member_no'), fullName: g('full_name'), houseId: houseIdFrom(house), email: g('email') || undefined, phone: g('phone') || undefined, city: g('city') || undefined }; });
   };
   return <div className="stack"><div className="card stack"><h2>Import the year-group register</h2>
-    <p className="small muted">Paste CSV with columns member_no, full_name, house (name or H1–H8), email, phone, city. Each classmate with an email gets an invitation link by email and SMS to set their password.</p>
+    <p className="small muted">Paste CSV with columns member_no, full_name, house (name or house number 1–8), email, phone, city. Each classmate with an email gets an invitation link by email and SMS to set their password.</p>
     <textarea className="mono" rows={8} value={text} onChange={(e) => setText(e.target.value)} style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 8, padding: 10, background: 'var(--surface-2)' }} />
     <div className="row"><button className="btn primary" onClick={() => act(async () => setRes(await api.post('/admin/import-members', { rows: parse(), sendInvites: true })), 'Import finished.')}>Import and send invitations</button></div>
     {res && <div className={'callout ' + (res.skipped.length ? 'warn' : 'ok')}>{res.created} imported. {res.skipped.length ? 'Skipped: ' + res.skipped.map((s: any) => `${s.memberNo} (${s.reason})`).join(', ') : ''}</div>}
-    <p className="def">Houses: {HOUSE_OPTS.map(([id, n]) => `${id} ${n}`).join(' · ')}</p></div></div>;
+    <p className="def">Houses: {HOUSE_OPTS.map(([, n]) => n).join(' · ')}</p></div></div>;
 }
 
 function Staff() {
