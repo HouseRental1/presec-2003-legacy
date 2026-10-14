@@ -33,6 +33,14 @@ export async function buildApp() {
   await app.register(cookie);
   await app.register(rateLimit, { global: false });
 
+  // One address for everyone: page visits to a one-off Vercel deployment address go to the main site,
+  // so nobody lands on an old copy with its own separate sign-in. API calls, webhooks and crons are left alone.
+  if (config.canonicalHost) app.addHook('onRequest', async (req, reply) => {
+    const host = (req.headers['x-forwarded-host'] as string | undefined)?.split(',')[0].trim() ?? req.headers.host ?? '';
+    if (host && host !== config.canonicalHost && (req.method === 'GET' || req.method === 'HEAD') && !req.url.startsWith('/api/'))
+      return reply.header('cache-control', 'no-store').redirect(`https://${config.canonicalHost}${req.url}`, 308);
+  });
+
   // Keep the raw body: webhook signatures are computed over the exact bytes received.
   app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
     (req as FastifyRequest).rawBody = body as string;

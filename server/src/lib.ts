@@ -15,7 +15,12 @@ export const config = {
   webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET ?? 'dev-webhook-secret',
   sessionHours: Number(process.env.SESSION_HOURS ?? 12),
   loginRateMax: Number(process.env.LOGIN_RATE_MAX ?? 10),   // sign-in attempts per IP per minute
-  appUrl: process.env.APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? 'https://' + process.env.VERCEL_PROJECT_PRODUCTION_URL : 'http://localhost:5173'),          // public URL of the web app (links in messages, payment return)
+  // The one public address. On Vercel production it is the project's production domain, so links in invitations,
+  // password resets and payment returns never point at a one-off deployment address or localhost.
+  appUrl: (process.env.VERCEL_ENV === 'production' && process.env.VERCEL_PROJECT_PRODUCTION_URL && !process.env.APP_URL_OVERRIDE
+    ? 'https://' + process.env.VERCEL_PROJECT_PRODUCTION_URL : process.env.APP_URL_OVERRIDE ?? process.env.APP_URL ?? 'http://localhost:5173').replace(/\/+$/, ''),
+  /** When set, page visits on any other host (e.g. presec-2003-legacy-abc123-team.vercel.app) are redirected here. */
+  canonicalHost: process.env.CANONICAL_HOST ?? (process.env.VERCEL_ENV === 'production' ? process.env.VERCEL_PROJECT_PRODUCTION_URL ?? '' : ''),          // public URL of the web app (links in messages, payment return)
   paymentProvider: (process.env.PAYMENT_PROVIDER ?? 'sandbox') as 'sandbox' | 'paystack',
   paystackSecret: process.env.PAYSTACK_SECRET_KEY ?? '',
   paystackApi: process.env.PAYSTACK_API ?? 'https://api.paystack.co',
