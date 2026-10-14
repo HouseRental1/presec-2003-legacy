@@ -1,0 +1,56 @@
+/**
+ * First-run set-up: on an empty database, create the chart of accounts, default control settings,
+ * PRESEC's houses, Legacy Project 1 and ONE administrator. Refuses once any user exists.
+ * Used by the sign-in page (protected by the set-up code) and by scripts/bootstrap.
+ */
+import { z } from 'zod';
+import { Db, q, hashPassword, config, AppError, audit, safeEqualHex, sha256 } from '../lib.js';
+import { ACCOUNTS } from './ledger.js';
+
+export const DEFAULT_HOUSES = 'H1:Kwansa,H2:Clerk,H3:Engmann,H4:Akro,H5:Riis,H6:Labone,H7:Ako-Adjei,H8:Owusu-Parry';
+export const DEFAULT_PROJECT = 'Legacy Project 1: six-unit classroom block, PRESEC Legon';
+
+/** What the sign-in page needs to know. Never reveals anything once set up. */
+export async function setupStatus(db: Db | any) {
+  try {
+    const [{ n }] = await q<any>(db, 'SELECT count(*)::int n FROM users');
+    return { database: 'ready', needsSetup: n === 0, codeConfigured: !!setupCode() };
+  } catch (e: any) {
+    // 42P01 = table missing (migrations have not run); anything else = cannot reach the database.
+    return { database: e.code === '42P01' ? 'not_migrated' : 'unreachable', needsSetup: false, codeConfigured: !!setupCode() };
+  }
+}
+const setupCode = () => process.env.SETUP_CODE || config.cronSecret || '';
+
+export const FirstAdminInput = z.object({
+  code: z.string().min(1, 'Enter the set-up code.'),
+  name: z.string().trim().min(2, 'Enter your name.').max(120),
+  email: z.string().trim().email('Enter a valid email address.'),
+  password: z.string().min(12, 'Use a password of at least 12 characters.').max(200),
+});
+
+export async function createFirstAdmin(db: Db, input: { name: string; email: string; password: string; houses?: string; projectName?: string }, checkCode?: string) {
+  if (checkCode !== undefined) {
+    const expected = setupCode();
+    if (!expected) throw new AppError(503, 'no_setup_code', 'Set-up is not configured: add SETUP_CODE (or CRON_SECRET) in Vercel and redeploy.');
+    if (!safeEqualHex(sha256(checkCode.trim()), sha256(expected))) throw new AppError(403, 'bad_setup_code', 'That set-up code is not correct.');
+  }
+  await db.query('SELECT pg_advisory_xact_lock(7311002)'); // two people submitting at once cannot both succeed
+  const [{ n }] = await q<any>(db, 'SELECT count(*)::int n FROM users');
+  if (n > 0) throw new AppError(409, 'already_set_up', 'Set-up is already complete. Sign in instead.');
+  for (const [code, a] of Object.entries(ACCOUNTS)) await db.query('INSERT INTO ledger_accounts VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [code, a.name, a.normal]);
+  const defaults: Record<string, unknown> = {
+    dual_approval_above: 5_000_000, member_vote_above: 10_000_000, admin_cap: 3, quorum_bp: 3000,
+    fees: { momo_bp: 100, card_bp: 250 }, fx_indicative: { GHS: 1, USD: 15.6, GBP: 20.4 },
+  };
+  for (const [k, v] of Object.entries(defaults)) await db.query('INSERT INTO settings VALUES ($1,$2) ON CONFLICT DO NOTHING', [k, JSON.stringify(v)]);
+  for (const pair of (input.houses ?? DEFAULT_HOUSES).split(',')) {
+    const [id, name] = pair.split(':').map((s) => s.trim());
+    await db.query('INSERT INTO houses VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, name]);
+  }
+  await db.query(`INSERT INTO projects VALUES ('P1',$1,'initiation') ON CONFLICT DO NOTHING`, [input.projectName ?? DEFAULT_PROJECT]);
+  const [u] = await q<any>(db, 'INSERT INTO users (email, password_hash, display_name) VALUES (lower($1),$2,$3) RETURNING id', [input.email.trim(), await hashPassword(input.password), input.name.trim()]);
+  await db.query(`INSERT INTO user_roles (user_id, role) VALUES ($1,'admin')`, [u.id]);
+  await audit(db, null, 'Created first administrator', input.email.trim().toLowerCase());
+  return { ok: true, email: input.email.trim().toLowerCase() };
+}

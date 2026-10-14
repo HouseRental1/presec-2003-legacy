@@ -19,6 +19,7 @@ import * as A from './services/accounts.js';
 import * as K from './services/community.js';
 import * as S from './services/setup.js';
 import * as Msg from './services/messaging.js';
+import * as FR from './services/firstrun.js';
 import { trialBalance } from './services/ledger.js';
 import { waitUntil } from '@vercel/functions';
 
@@ -191,6 +192,13 @@ export async function buildApp() {
   }));
   app.get('/api/audit', read(async (a) => { need(a, 'audit.view', 'view the audit trail'); return q(pool, 'SELECT seq, at, actor_label, action, target, detail, hash FROM audit_events ORDER BY seq DESC LIMIT 200'); }));
   app.get('/api/audit/verify', read(async (a) => { need(a, 'audit.view', 'check the audit trail'); return verifyAuditChain(pool); }));
+
+  /* first-run set-up (only works while the database has no users) */
+  app.get('/api/setup/status', async () => FR.setupStatus(pool));
+  app.post('/api/setup/first-admin', { config: { rateLimit: { max: 10, timeWindow: '1 minute' } } }, async (req) => {
+    const b = FR.FirstAdminInput.parse(req.body);
+    return tx((db) => FR.createFirstAdmin(db, b, b.code));
+  });
 
   /* accounts */
   const limited = { config: { rateLimit: { max: config.loginRateMax, timeWindow: '1 minute' } } };

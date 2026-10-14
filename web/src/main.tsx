@@ -1,4 +1,4 @@
-import { StrictMode, useState } from 'react';
+import { StrictMode, useEffect, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import './styles.css';
@@ -23,7 +23,34 @@ const NAV: [string, string, string?][] = [
   ['/audit', 'Audit trail', 'audit.view'], ['/admin', 'Administration', 'admin'], ['/give', 'Public page'],
 ];
 
+function FirstAdmin({ onDone }: { onDone: () => void }) {
+  const [f, setF] = useState({ name: '', email: '', password: '', password2: '', code: '' });
+  const [err, setErr] = useState(''), [busy, setBusy] = useState(false);
+  const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement>) => setF({ ...f, [k]: e.target.value });
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault(); setErr('');
+    if (f.password !== f.password2) return setErr('The two passwords do not match.');
+    setBusy(true);
+    try { await api.post('/setup/first-admin', { name: f.name, email: f.email, password: f.password, code: f.code }); onDone(); }
+    catch (x) { setErr((x as Error).message); } finally { setBusy(false); }
+  };
+  return <div className="login"><form className="card stack" onSubmit={submit}>
+    <div className="row"><div className="seal">03</div><div><h1 style={{ fontSize: '1.25rem' }}>Set up Class of 2003 Legacy</h1><p className="muted small">Create the first administrator account</p></div></div>
+    <p className="small">This appears only once, while the platform has no accounts. The person who sets it up becomes the platform administrator and invites everyone else.</p>
+    <label className="f" htmlFor="sn">Your full name<input id="sn" required autoComplete="name" value={f.name} onChange={set('name')} /></label>
+    <label className="f" htmlFor="se">Email<input id="se" type="email" required autoComplete="username" value={f.email} onChange={set('email')} /></label>
+    <label className="f" htmlFor="sp">Password<input id="sp" type="password" required minLength={12} autoComplete="new-password" value={f.password} onChange={set('password')} /><span className="def">At least 12 characters. A short sentence is easy to remember.</span></label>
+    <label className="f" htmlFor="sp2">Repeat password<input id="sp2" type="password" required autoComplete="new-password" value={f.password2} onChange={set('password2')} /></label>
+    <label className="f" htmlFor="sc">Set-up code<input id="sc" required autoComplete="off" value={f.code} onChange={set('code')} /><span className="def">The CRON_SECRET value from Vercel → Settings → Environment Variables.</span></label>
+    {err && <div className="callout bad">{err}</div>}
+    <button className="btn primary" disabled={busy}>{busy ? 'Creating…' : 'Create administrator account'}</button>
+  </form></div>;
+}
+
 function Login() {
+  const [setup, setSetup] = useState<{ database: string; needsSetup: boolean } | null>(null);
+  const [created, setCreated] = useState(false);
+  useEffect(() => { api.get('/setup/status').then(setSetup).catch(() => setSetup({ database: 'unreachable', needsSetup: false })); }, []);
   const { reload } = useSession();
   const [email, setEmail] = useState(''), [password, setPassword] = useState(''), [code, setCode] = useState('');
   const [needCode, setNeedCode] = useState(false), [err, setErr] = useState(''), [busy, setBusy] = useState(false), [sent, setSent] = useState(false);
@@ -34,7 +61,10 @@ function Login() {
     catch (x) { const a = x as ApiError; if (a.code === 'mfa_required') setNeedCode(true); setErr(a.message); }
     finally { setBusy(false); }
   };
+  if (setup?.needsSetup && !created) return <FirstAdmin onDone={() => { setCreated(true); setErr(''); }} />;
   return <div className="login"><form className="card stack" onSubmit={submit}>
+    {created && <div className="callout ok">Administrator account created. Sign in with that email and password.</div>}
+    {setup && setup.database !== 'ready' && <div className="callout bad">{setup.database === 'not_migrated' ? 'The database tables have not been created yet. In Vercel, redeploy the latest deployment and check the build log for “applied 003_platform.sql”.' : 'The app cannot reach its database. In Vercel, check that DATABASE_URL is set (Storage → Neon) and redeploy.'}</div>}
     <div className="row"><div className="seal">03</div><div><h1 style={{ fontSize: '1.25rem' }}>Class of 2003 Legacy</h1><p className="muted small">PRESEC Legon · Ɔdadeɛ 2003 year group</p></div></div>
     <label className="f" htmlFor="em">Email<input id="em" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
     <label className="f" htmlFor="pw">Password<input id="pw" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
@@ -43,7 +73,7 @@ function Login() {
     <button className="btn primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
     <div className="row between"><button type="button" className="btn sm" onClick={forgot}>Forgot password?</button><Link to="/give" className="small">Public page</Link></div>
     {sent && <div className="callout ok">If that email is registered, a reset link is on its way by email and SMS.</div>}
-    <p className="def">Development sample accounts: ama, kofi, efua, yaw, nana, abena, kwame, akosua, gifty @presec2003.test · password Legacy-demo-2026</p>
+    {location.hostname === 'localhost' && <p className="def">Development sample accounts: ama, kofi, efua, yaw, nana, abena, kwame, akosua, gifty @presec2003.test · password Legacy-demo-2026</p>}
   </form></div>;
 }
 
