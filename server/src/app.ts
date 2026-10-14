@@ -103,6 +103,9 @@ export async function buildApp() {
   app.get('/api/dashboard', read(async () => ({ ...(await F.dashboard(pool)), progress: await J.progress(pool).then((p) => ({ reported: p.reported, verified: p.verified, accepted: p.accepted })) })));
   app.get('/api/standings', read(async (_a, req) => C.standings(pool, (req.query as any).asOf)));
   app.get('/api/rules', read(async () => C.ruleVersions(pool)));
+  app.get('/api/houses', read((a) => C.houseOverview(pool, a)));
+  app.post('/api/houses/:id', write(C.HouseProfile, (db, a, b, r) => C.updateHouse(db, a, id(r), b)));
+  app.post('/api/houses/members', write(A.AddClassmateInput, (db, a, b) => A.addClassmate(db, a, b)));
   app.get('/api/captain/outreach', read((a) => C.captainOutreach(pool, a)));
   app.post('/api/captain/remind', write(null, (db, a) => C.sendReminder(db, a)));
 

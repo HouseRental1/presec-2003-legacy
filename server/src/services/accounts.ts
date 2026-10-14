@@ -11,9 +11,44 @@ async function issueToken(db: Db, userId: string, purpose: 'invite' | 'reset', h
   return `${config.appUrl}/set-password?token=${token}`;
 }
 
+/** Next free member number in the P03-0001 series. */
+export async function nextMemberNo(db: Db) {
+  const [r] = await q<any>(db, `SELECT coalesce(max(substring(member_no from '^P03-(\\d+)$')::int), 0) + 1 n FROM members WHERE member_no ~ '^P03-\\d+$'`);
+  return 'P03-' + String(r.n).padStart(4, '0');
+}
+
+/* ───────── add one classmate from the Houses page (or link the signed-in user to their house) */
+export const AddClassmateInput = z.object({
+  fullName: z.string().min(3, 'Enter the full name.').max(120), houseId: z.string(), isMe: z.boolean().default(false),
+  email: z.string().email().optional().or(z.literal('')), phone: z.string().max(30).optional(), city: z.string().max(80).optional(), profession: z.string().max(80).optional(),
+  memberNo: z.string().max(20).optional().or(z.literal('')), sendInvite: z.boolean().default(true),
+});
+export async function addClassmate(db: Db, actor: Actor, input: z.infer<typeof AddClassmateInput>) {
+  need(actor, 'admin.members', 'add classmates');
+  if (input.isMe) {
+    if (actor.memberId) throw conflict('You are already on the register.');
+    if (!(await q(db, 'SELECT 1 FROM houses WHERE id=$1', [input.houseId])).length) throw invalid('Choose one of the eight houses.');
+    const memberNo = input.memberNo || await nextMemberNo(db);
+    const u = await one<any>(db, 'SELECT email FROM users WHERE id=$1', [actor.userId]);
+    let m: any;
+    try {
+      m = await one<any>(db, 'INSERT INTO members (member_no, user_id, full_name, email, phone, city, profession, verified_at, verified_by) VALUES ($1,$2,$3,$4,$5,$6,$7,now(),$2) RETURNING id',
+        [memberNo, actor.userId, input.fullName, u.email, normaliseGhanaPhone(input.phone) ?? input.phone ?? null, input.city ?? null, input.profession ?? null]);
+    } catch (e: any) { if (e.code === '23505') throw conflict('That member number is already used.'); throw e; }
+    await db.query(`INSERT INTO house_memberships (member_id, house_id, valid_from, reason, changed_by) VALUES ($1,$2,'2000-01-01','Added themselves to the register',$3)`, [m.id, input.houseId, actor.userId]);
+    await db.query(`INSERT INTO user_roles (user_id, role, granted_by) VALUES ($1,'member',$1) ON CONFLICT DO NOTHING`, [actor.userId]);
+    await db.query('UPDATE users SET display_name=$2 WHERE id=$1', [actor.userId, input.fullName]);
+    await audit(db, actor, 'Joined the register', memberNo, input.houseId);
+    return { memberNo, invited: false };
+  }
+  const r = await importMembers(db, actor, { rows: [{ memberNo: input.memberNo || undefined, fullName: input.fullName, houseId: input.houseId, email: input.email, phone: input.phone, city: input.city, profession: input.profession }], sendInvites: input.sendInvite });
+  if (r.skipped.length) throw conflict(`Not added: ${r.skipped[0].reason}.`);
+  return { memberNo: r.memberNos[0], invited: !!input.email && input.sendInvite };
+}
+
 /* ───────── bulk import of the year-group register, with invitations */
 export const ImportMembersInput = z.object({ rows: z.array(z.object({
-  memberNo: z.string().min(3).max(20), fullName: z.string().min(3), houseId: z.string(), email: z.string().email().optional().or(z.literal('')),
+  memberNo: z.string().min(3).max(20).optional().or(z.literal('')), fullName: z.string().min(3), houseId: z.string(), email: z.string().email().optional().or(z.literal('')),
   phone: z.string().optional(), city: z.string().optional(), profession: z.string().optional(),
 })).min(1).max(1500), sendInvites: z.boolean().default(true) });
 export async function importMembers(db: Db, actor: Actor, input: z.infer<typeof ImportMembersInput>) {
@@ -21,27 +56,28 @@ export async function importMembers(db: Db, actor: Actor, input: z.infer<typeof 
   const houses = new Set((await q<any>(db, 'SELECT id FROM houses')).map((h) => h.id));
   const created: string[] = [], skipped: { memberNo: string; reason: string }[] = [];
   for (const r of input.rows) {
-    if (!houses.has(r.houseId)) { skipped.push({ memberNo: r.memberNo, reason: 'unknown house ' + r.houseId }); continue; }
-    if ((await q(db, 'SELECT 1 FROM members WHERE member_no=$1', [r.memberNo])).length) { skipped.push({ memberNo: r.memberNo, reason: 'already registered' }); continue; }
+    if (!r.memberNo) r.memberNo = await nextMemberNo(db);
+    if (!houses.has(r.houseId)) { skipped.push({ memberNo: r.memberNo!, reason: 'unknown house ' + r.houseId }); continue; }
+    if ((await q(db, 'SELECT 1 FROM members WHERE member_no=$1', [r.memberNo])).length) { skipped.push({ memberNo: r.memberNo!, reason: 'already registered' }); continue; }
     const email = r.email ? r.email.toLowerCase() : null;
     let userId: string | null = null;
     if (email) {
-      if ((await q(db, 'SELECT 1 FROM users WHERE email=$1', [email])).length) { skipped.push({ memberNo: r.memberNo, reason: 'email already used' }); continue; }
+      if ((await q(db, 'SELECT 1 FROM users WHERE email=$1', [email])).length) { skipped.push({ memberNo: r.memberNo!, reason: 'email already used' }); continue; }
       // Unusable random password until the member accepts the invitation.
       userId = (await one<any>(db, 'INSERT INTO users (email, password_hash, display_name) VALUES ($1,$2,$3) RETURNING id', [email, await hashPassword(newToken()), r.fullName])).id;
       await db.query(`INSERT INTO user_roles (user_id, role, granted_by) VALUES ($1,'member',$2)`, [userId, actor.userId]);
     }
     const [m] = await q<any>(db, 'INSERT INTO members (member_no, user_id, full_name, email, phone, city, profession) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id',
-      [r.memberNo, userId, r.fullName, email, normaliseGhanaPhone(r.phone) ?? r.phone ?? null, r.city ?? null, r.profession ?? null]);
+      [r.memberNo!, userId, r.fullName, email, normaliseGhanaPhone(r.phone) ?? r.phone ?? null, r.city ?? null, r.profession ?? null]);
     await db.query(`INSERT INTO house_memberships (member_id, house_id, valid_from, reason, changed_by) VALUES ($1,$2,'2000-01-01','Imported from year-group register',$3)`, [m.id, r.houseId, actor.userId]);
     if (userId && input.sendInvites) {
       const link = await issueToken(db, userId, 'invite', 24 * 14);
       await notify(db, 'member:' + m.id, ['email', 'sms'], `Ɔdadeɛ 2003: you are invited to the Class of 2003 Legacy platform. Set your password here (link valid 14 days): ${link}`, 'security');
     }
-    created.push(r.memberNo);
+    created.push(r.memberNo!);
   }
   await audit(db, actor, 'Imported members', `${created.length} members`, `${skipped.length} skipped`);
-  return { created: created.length, skipped };
+  return { created: created.length, skipped, memberNos: created };
 }
 export async function resendInvite(db: Db, actor: Actor, memberNo: string) {
   need(actor, 'admin.members', 'send invitations');

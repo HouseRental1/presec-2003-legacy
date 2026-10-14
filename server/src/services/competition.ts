@@ -93,3 +93,19 @@ export async function ruleVersions(db: Db | any) {
   return q(db, 'SELECT * FROM competition_rules ORDER BY period_start');
 }
 void one;
+
+/* ───────── house profiles and rosters (always available, with or without a competition) */
+export async function houseOverview(db: Db | any, actor: Actor) {
+  need(actor, 'dir', 'view the houses');
+  return q(db, `SELECT h.id, h.name, h.about, h.motto,
+      (SELECT count(*)::int FROM house_memberships hm WHERE hm.house_id=h.id AND hm.valid_to IS NULL) members,
+      (SELECT count(*)::int FROM house_memberships hm JOIN members m ON m.id=hm.member_id WHERE hm.house_id=h.id AND hm.valid_to IS NULL AND m.user_id IS NOT NULL) with_accounts,
+      (SELECT coalesce(json_agg(coalesce(m.full_name, u.display_name)), '[]') FROM house_captains c JOIN users u ON u.id=c.user_id LEFT JOIN members m ON m.user_id=u.id WHERE c.house_id=h.id) captains
+    FROM houses h ORDER BY h.id`);
+}
+export const HouseProfile = z.object({ about: z.string().max(2000).optional(), motto: z.string().max(200).optional() });
+export async function updateHouse(db: Db, actor: Actor, id: string, input: z.infer<typeof HouseProfile>) {
+  need(actor, 'admin.members', 'edit house profiles');
+  const h = await one<any>(db, 'UPDATE houses SET about=$2, motto=$3 WHERE id=$1 RETURNING name', [id, input.about?.trim() || null, input.motto?.trim() || null]);
+  await audit(db, actor, 'Updated house profile', id, h.name);
+}

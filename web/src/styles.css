@@ -61,7 +61,7 @@ td{padding:9px 8px;border-bottom:1px solid var(--line);vertical-align:top} td.r,
 .callout.warn{background:var(--warn-soft);border-color:var(--warn)} .callout.ok{background:var(--ok-soft);border-color:var(--ok)} .callout.bad{background:var(--bad-soft);border-color:var(--bad)}
 label.f{display:flex;flex-direction:column;gap:5px;font-size:.84rem;font-weight:600}
 label.f input,label.f select,label.f textarea{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:9px 10px;font-weight:400;width:100%}
-.fgrid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr))}
+.fgrid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,150px),1fr))}
 .kv{display:grid;grid-template-columns:auto minmax(0,1fr);gap:6px 16px;font-size:.88rem;margin:0} .kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:600}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(84px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:11px 16px;border-radius:10px;font-size:.88rem;z-index:60;max-width:min(92vw,520px)}
 .toast.bad{background:var(--bad);color:#fff}
@@ -96,3 +96,8 @@ label.f input,label.f select,label.f textarea{border:1px solid var(--line);backg
 .tick.done{background:var(--ok);border-color:var(--ok);color:#fff} .tick.not_applicable{background:var(--surface-2);color:var(--muted)} .tick.in_progress{border-color:var(--brand)}
 .overdue{color:var(--bad);font-weight:600}
 @media (max-width:900px){.phases{grid-template-columns:repeat(5,minmax(120px,1fr));overflow-x:auto;padding-bottom:4px}}
+.house-grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(min(100%,150px),1fr))}
+.house-card{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;gap:5px;padding:14px 14px 12px;border-radius:12px;background:var(--surface);border:1px solid var(--line);border-top:5px solid var(--hc);box-shadow:var(--shadow);transition:transform .12s,border-color .12s}
+.house-card:hover{transform:translateY(-1px)} .house-card:focus-visible{outline:3px solid var(--hc);outline-offset:2px}
+.house-card.on{border-color:var(--hc);background:color-mix(in srgb,var(--hc) 8%,var(--surface))}
+.house-card .hn{font-family:var(--f-display);font-size:1.15rem} .house-card .rank{font-weight:700;color:var(--hc)} .house-card .motto{font-style:italic}
