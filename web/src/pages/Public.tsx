@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, ghs, pct } from '../api';
-import { Bar, useLoad } from '../ui';
+import { AuthShell, Bar, useLoad } from '../ui';
 
 /** Public page: approved figures only, no individual amounts. Friends of the school can give here. */
 export function Give() {
@@ -63,14 +63,14 @@ export function PayReturn() {
     if (ref) tick(0);
     return () => { stop = true; };
   }, [ref]);
-  return <div className="login"><div className="card stack" style={{ maxWidth: 460 }}>
+  return <AuthShell><div className="card stack" style={{ maxWidth: 460 }}>
     <h1 style={{ fontSize: '1.3rem' }}>{s?.status === 'verified' ? 'Thank you — payment received' : s?.status === 'pending' ? 'Confirming your payment…' : s?.status === 'rejected' ? 'Payment not completed' : 'Checking…'}</h1>
     {s?.status === 'verified' && <p>{ghs(s.amount, 2)} is confirmed. Receipt <b className="mono">{s.receipt}</b>.{s.category === 'member' ? ' Your house has been credited.' : ''}</p>}
     {s?.status === 'pending' && <p className="muted">Waiting for the provider’s confirmation ({tries + 1}). If you approved the prompt, this usually takes a few seconds.</p>}
     {s?.status === 'rejected' && <p className="muted">No money was taken, or the provider reported a failure. You can try again.</p>}
     <p className="def">Reference <span className="mono">{ref}</span></p>
     <div className="row"><Link className="btn primary" to="/money">Back to my contributions</Link><Link className="btn" to="/give">Public page</Link></div>
-  </div></div>;
+  </div></AuthShell>;
 }
 
 export function SetPassword() {
@@ -81,11 +81,11 @@ export function SetPassword() {
     if (pw !== pw2) return setMsg('The two passwords do not match.');
     try { await api.post('/auth/set-password', { token, password: pw }); setDone(true); } catch (x) { setMsg((x as Error).message); }
   };
-  return <div className="login"><form className="card stack" onSubmit={go} style={{ maxWidth: 420 }}>
+  return <AuthShell><form className="card stack" onSubmit={go} style={{ maxWidth: 420 }}>
     <h1 style={{ fontSize: '1.3rem' }}>Set your password</h1>
     {done ? <><p>Your password is set. You can now sign in.</p><Link className="btn primary" to="/">Sign in</Link></> : <>
       <label className="f" htmlFor="p1">New password<input id="p1" type="password" autoComplete="new-password" minLength={10} required value={pw} onChange={(e) => setPw(e.target.value)} /><span className="def">At least 10 characters. A short sentence is easy to remember.</span></label>
       <label className="f" htmlFor="p2">Repeat it<input id="p2" type="password" autoComplete="new-password" required value={pw2} onChange={(e) => setPw2(e.target.value)} /></label>
       {msg && <div className="callout bad">{msg}</div>}<button className="btn primary">Save password</button></>}
-  </form></div>;
+  </form></AuthShell>;
 }

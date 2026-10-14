@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter, NavLink, Navigate, Route, Routes } from 'react-router-dom';
 import './styles.css';
 import { api, ApiError, HOUSE_NAME } from './api';
-import { SessionProvider, ToastProvider, useSession } from './ui';
+import { SessionProvider, ToastProvider, useSession, AuthShell, Crest } from './ui';
 import Home from './pages/Home';
 import Money from './pages/Money';
 import Houses from './pages/Houses';
@@ -44,8 +44,8 @@ function FirstAdmin({ onDone, recover = false, onCancel }: { onDone: () => void;
     try { await api.post(recover ? '/setup/recover-admin' : '/setup/first-admin', { name: f.name, email: f.email, password: f.password, code: f.code }); onDone(); }
     catch (x) { setErr((x as Error).message); } finally { setBusy(false); }
   };
-  return <div className="login"><form className="card stack" onSubmit={submit}>
-    <div className="row"><div className="seal">03</div><div><h1 style={{ fontSize: '1.25rem' }}>{recover ? 'Reset the administrator account' : 'Set up Class of 2003 Legacy'}</h1><p className="muted small">{recover ? 'Available only while the platform has a single account' : 'Create the first administrator account'}</p></div></div>
+  return <AuthShell><form className="card stack" onSubmit={submit}>
+    <div className="row"><div><h1 style={{ fontSize: '1.25rem' }}>{recover ? 'Reset the administrator account' : 'Set up Class of 2003 Legacy'}</h1><p className="muted small">{recover ? 'Available only while the platform has a single account' : 'Create the first administrator account'}</p></div></div>
     <p className="small">{recover ? 'Use this if the first administrator account was created with a password you no longer have. It replaces that account’s name, email and password.' : 'This appears only once, while the platform has no accounts. The person who sets it up becomes the platform administrator and invites everyone else.'}</p>
     <label className="f" htmlFor="sn">Your full name<input id="sn" required autoComplete="name" value={f.name} onChange={set('name')} /></label>
     <label className="f" htmlFor="se">Email<input id="se" type="email" required autoComplete="username" value={f.email} onChange={set('email')} /></label>
@@ -55,7 +55,7 @@ function FirstAdmin({ onDone, recover = false, onCancel }: { onDone: () => void;
     {err && <div className="callout bad">{err}</div>}
     <button className="btn primary" disabled={busy}>{busy ? 'Saving…' : recover ? 'Reset administrator account' : 'Create administrator account'}</button>
     {onCancel && <button type="button" className="btn" onClick={onCancel}>Back to sign in</button>}
-  </form></div>;
+  </form></AuthShell>;
 }
 
 const HOUSE_CHOICES = Object.entries(HOUSE_NAME) as [string, string][];
@@ -72,8 +72,8 @@ function Signup({ onDone, onCancel }: { onDone: (email: string) => void; onCance
     try { const { password2, ...body } = f; await api.post('/signup', body); onDone(f.email.trim()); }
     catch (x) { setErr((x as Error).message.replace(/^\w+: /, '').replace(/; \w+: /g, ' ')); } finally { setBusy(false); }
   };
-  return <div className="login"><form className="card stack" onSubmit={submit} style={{ maxWidth: 520 }}>
-    <div className="row"><div className="seal">03</div><div><h1 style={{ fontSize: '1.25rem' }}>Request access</h1><p className="muted small">For the PRESEC Legon Ɔdadeɛ 2003 year group</p></div></div>
+  return <AuthShell><form className="card stack" onSubmit={submit} style={{ maxWidth: 520 }}>
+    <div className="row"><div><h1 style={{ fontSize: '1.25rem' }}>Request access</h1><p className="muted small">For the PRESEC Legon Ɔdadeɛ 2003 year group</p></div></div>
     <p className="small" style={{ margin: 0 }}>Fill this in and an administrator will approve your account, usually after checking with your house. You choose your password now and use it once approved.</p>
     <div className="fgrid">
       <label className="f" htmlFor="su1">Full name<input id="su1" required autoComplete="name" value={f.fullName} onChange={set('fullName')} /></label>
@@ -89,7 +89,7 @@ function Signup({ onDone, onCancel }: { onDone: (email: string) => void; onCance
     {err && <div className="callout bad">{err}</div>}
     <button className="btn primary" disabled={busy}>{busy ? 'Sending…' : 'Send request'}</button>
     <button type="button" className="btn" onClick={onCancel}>Back to sign in</button>
-  </form></div>;
+  </form></AuthShell>;
 }
 
 /** Set on a successful sign-in so the layout can send the person to their own area once. */
@@ -117,11 +117,11 @@ function Login() {
   if (setup?.needsSetup && !created) return <FirstAdmin onDone={() => { setCreated(true); setErr(''); }} />;
   if (signingUp) return <Signup onDone={(e) => { setSigningUp(false); setEmail(e); setRequested(true); setErr(''); }} onCancel={() => setSigningUp(false)} />;
   if (recovering) return <FirstAdmin recover onDone={() => { setRecovering(false); setCreated(true); setErr(''); }} onCancel={() => setRecovering(false)} />;
-  return <div className="login"><form className="card stack" onSubmit={submit}>
+  return <AuthShell><form className="card stack" onSubmit={submit}>
     {created && <div className="callout ok">Administrator account saved. Sign in with that email and password.</div>}
     {requested && <div className="callout ok"><b>Request sent.</b> An administrator will check you are in the 2003 year group and approve your account. Once approved, sign in here with your email and the password you chose.</div>}
     {setup && setup.database !== 'ready' && <div className="callout bad">{setup.database === 'not_migrated' ? 'The database tables have not been created yet. In Vercel, redeploy the latest deployment and check the build log for “applied 003_platform.sql”.' : 'The app cannot reach its database. In Vercel, check that DATABASE_URL is set (Storage → Neon) and redeploy.'}</div>}
-    <div className="row"><div className="seal">03</div><div><h1 style={{ fontSize: '1.25rem' }}>Class of 2003 Legacy</h1><p className="muted small">PRESEC Legon · Ɔdadeɛ 2003 year group</p></div></div>
+    <div className="row"><div><h1 style={{ fontSize: '1.25rem' }}>Class of 2003 Legacy</h1><p className="muted small">Sign in to follow the classroom block</p></div></div>
     <label className="f" htmlFor="em">Email<input id="em" type="email" autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} /></label>
     <label className="f" htmlFor="pw">Password<input id="pw" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} /></label>
     {needCode && <label className="f" htmlFor="cd">Authenticator code<input id="cd" inputMode="numeric" pattern="\d{6}" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} /></label>}
@@ -132,7 +132,7 @@ function Login() {
     {sent && <div className="callout ok">If that email is registered, a reset link is on its way by email and SMS.</div>}
     {setup?.canRecover && <button type="button" className="btn sm" onClick={() => setRecovering(true)}>Locked out during set-up? Reset the administrator account</button>}
     {location.hostname === 'localhost' && <p className="def">Development sample accounts: ama, kofi, efua, yaw, nana, abena, kwame, akosua, gifty @presec2003.test · password Legacy-demo-2026</p>}
-  </form></div>;
+  </form></AuthShell>;
 }
 
 function Shell() {
@@ -148,7 +148,7 @@ function Shell() {
   const memberOnly = (el: ReactNode) => isAdmin ? el : <Navigate to="/" replace />;
   return <div className="app">
     <aside className="rail" aria-label="Main navigation">
-      <div className="brandmark"><div className="seal">03</div><div><b>Class of 2003 Legacy</b><span>PRESEC Legon · Ɔdadeɛ 2003</span></div></div>
+      <div className="brandmark"><Crest size={46} /><div><b>Class of 2003 Legacy</b><span>PRESEC Legon, Ɔdadeɛ 2003</span></div></div>
       <nav className="nav">{items.map(([to, label]) => <NavLink key={to} to={to} end={to === '/'}>{label}</NavLink>)}</nav>
     </aside>
     <main className="main">
