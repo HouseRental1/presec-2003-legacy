@@ -5,7 +5,12 @@ export class ApiError extends Error { constructor(public status: number, public 
 const myBuild = (document.querySelector('script[type="module"][src*="/assets/index-"]') as HTMLScriptElement | null)?.getAttribute('src')?.replace(/^.*(\/assets\/)/, '$1') ?? '';
 function checkBuild(server: string | null) {
   if (!server || !myBuild || server === myBuild) return;
-  try { if (sessionStorage.getItem('reloaded-for') === server) return; sessionStorage.setItem('reloaded-for', server); } catch { /* storage blocked: reload anyway, once per page */ }
+  // At most one automatic reload per tab every 10 minutes, so a deployment roll-over can never cause a reload loop.
+  try {
+    const last = Number(sessionStorage.getItem('reloaded-at') ?? 0);
+    if (Date.now() - last < 10 * 60 * 1000) return;
+    sessionStorage.setItem('reloaded-at', String(Date.now()));
+  } catch { return; }
   window.location.reload();
 }
 
