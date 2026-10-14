@@ -59,7 +59,7 @@ function FirstAdmin({ onDone, recover = false, onCancel }: { onDone: () => void;
 const HOUSE_CHOICES = Object.entries(HOUSE_NAME) as [string, string][];
 /** Request access: the classmate chooses their own password; an administrator approves before they can sign in. */
 function Signup({ onDone, onCancel }: { onDone: (email: string) => void; onCancel: () => void }) {
-  const [f, setF] = useState({ fullName: '', email: '', phone: '', houseId: '', city: '', profession: '', note: '', password: '', password2: '', website: '' });
+  const [f, setF] = useState({ fullName: '', email: '', phone: '', houseId: '', city: '', profession: '', note: '', password: '', password2: '' });
   const [err, setErr] = useState(''), [busy, setBusy] = useState(false);
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
   const submit = async (e: React.FormEvent) => {
@@ -84,7 +84,6 @@ function Signup({ onDone, onCancel }: { onDone: (email: string) => void; onCance
       <label className="f" htmlFor="su8">Choose a password<input id="su8" type="password" required minLength={10} autoComplete="new-password" value={f.password} onChange={set('password')} /><span className="def">At least 10 characters.</span></label>
       <label className="f" htmlFor="su9">Repeat password<input id="su9" type="password" required autoComplete="new-password" value={f.password2} onChange={set('password2')} /></label>
     </div>
-    <input tabIndex={-1} autoComplete="off" aria-hidden="true" value={f.website} onChange={set('website')} style={{ position: 'absolute', left: '-9999px', width: 1, height: 1 }} name="website" />
     {err && <div className="callout bad">{err}</div>}
     <button className="btn primary" disabled={busy}>{busy ? 'Sending…' : 'Send request'}</button>
     <button type="button" className="btn" onClick={onCancel}>Back to sign in</button>

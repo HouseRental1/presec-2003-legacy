@@ -70,7 +70,8 @@ describe('sign-up with administrator approval', () => {
   const signIn = (password = 'yaw-password-1') => app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'yaw.signup@example.org', password } });
   it('accepts a request; the applicant cannot sign in until approved', async () => {
     expect((await apply({})).statusCode).toBe(200);
-    expect((await apply({})).statusCode).toBe(200);                       // repeat is harmless
+    expect((await apply({})).statusCode).toBe(409);                       // already waiting: told so
+    expect((await apply({ email: 'admin@example.org' })).json().message).toMatch(/already has an account/);
     const w = await signIn(); expect(w.statusCode).toBe(403); expect(w.json().message).toMatch(/waiting for an administrator/);
     expect((await signIn('wrong-password-9')).statusCode).toBe(401);       // no hint without the right password
     expect((await apply({ email: 'bad', password: 'short' })).statusCode).toBe(400);

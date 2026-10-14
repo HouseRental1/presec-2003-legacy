@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api, ghs, HOUSE_NAME, houseIdFrom, today } from '../api';
 import { useDialog, downloadCsv } from '../forms';
 import { Gate, Pill, useAction, useLoad, useSession, useToast } from '../ui';
@@ -44,6 +44,13 @@ function Signups({ onChange }: { onChange: () => void }) {
   const [view, setView] = useState<'pending' | 'approved' | 'rejected'>('pending');
   const l = useLoad<any[]>(`/admin/signups?status=${view}`); const toast = useToast(); const [dialog, open] = useDialog();
   const done = (m: string) => { toast(m); l.reload(); onChange(); };
+  // Pick up new requests without a manual reload: when the tab regains focus, and every 30 seconds.
+  useEffect(() => {
+    const again = () => { if (document.visibilityState === 'visible') { l.reload(); onChange(); } };
+    window.addEventListener('focus', again); document.addEventListener('visibilitychange', again);
+    const t = setInterval(again, 30000);
+    return () => { window.removeEventListener('focus', again); document.removeEventListener('visibilitychange', again); clearInterval(t); };
+  }, [l.reload]); // eslint-disable-line
   return <div className="stack">{dialog}
     <div className="row" style={{ flexWrap: 'wrap' }}>{(['pending', 'approved', 'rejected'] as const).map((v) => <button key={v} className={'btn sm' + (view === v ? ' primary' : '')} onClick={() => setView(v)}>{v === 'pending' ? 'Waiting' : v === 'approved' ? 'Approved' : 'Declined'}</button>)}</div>
     <Gate error={l.error}>{!(l.data ?? []).length ? <div className="card"><p className="muted small" style={{ margin: 0 }}>{view === 'pending' ? 'No one is waiting. New requests from the “Request access” button on the sign-in page appear here.' : 'Nothing here yet.'}</p></div> :

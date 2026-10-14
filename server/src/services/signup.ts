@@ -13,13 +13,12 @@ export const SignupInput = z.object({
   profession: z.string().trim().max(80).optional().or(z.literal('')),
   note: z.string().trim().max(500).optional().or(z.literal('')),
   password: z.string().min(10, 'Use at least 10 characters.').max(200),
-  website: z.string().max(0).optional(),   // honeypot: real people leave this empty
 });
 export async function requestSignup(db: Db, input: z.infer<typeof SignupInput>, ip?: string) {
   const email = input.email.toLowerCase();
-  // Same answer whether or not the email already has an account, so accounts can't be discovered.
-  if ((await q(db, 'SELECT 1 FROM users WHERE email=$1', [email])).length) return { ok: true };
-  if ((await q(db, `SELECT 1 FROM signup_requests WHERE email=$1 AND status='pending'`, [email])).length) return { ok: true };
+  // A closed year-group platform: being clear helps people more than hiding whether an email is registered.
+  if ((await q(db, 'SELECT 1 FROM users WHERE email=$1', [email])).length) throw conflict('This email already has an account. Sign in with it, or use “Forgot password?” on the sign-in page.');
+  if ((await q(db, `SELECT 1 FROM signup_requests WHERE email=$1 AND status='pending'`, [email])).length) throw conflict('A request with this email is already waiting for approval. An administrator will review it soon.');
   const [{ n }] = await q<any>(db, `SELECT count(*)::int n FROM signup_requests WHERE status='pending'`);
   if (n >= 1000) throw conflict('Sign-up is temporarily paused. Please contact the committee.');
   await db.query(`INSERT INTO signup_requests (full_name, email, phone, house_id, city, profession, note, password_hash, ip) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
