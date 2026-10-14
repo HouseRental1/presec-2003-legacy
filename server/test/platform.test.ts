@@ -120,7 +120,7 @@ describe('AC-09 secret ballot with eligibility, one vote each, quorum and thresh
     const { castVote } = await import('../src/services/governance.js');
     const { tx } = await import('../src/lib.js');
     const extra = await q<any>(pool, `SELECT id FROM members WHERE verified_at IS NOT NULL AND id NOT IN (SELECT member_id FROM voter_roll WHERE proposal_id='P2') LIMIT 30`);
-    await tx(async (db) => { for (const m of extra) await castVote(db, { userId: null as any, name: 'x', roles: ['member'], memberId: m.id, mfaPassed: true }, 'P2', 'yes'); });
+    await tx(async (db) => { for (const m of extra) await castVote(db, { userId: null as any, name: 'x', roles: ['member'], memberId: m.id, mfaPassed: true, extra: ['vote'] }, 'P2', 'yes'); });
     const res = (await akosua.post('/api/proposals/P2/close')).json();
     expect(res.result).toBe('passed');
     const bv = await q<any>(pool, `SELECT version, total FROM budget_versions ORDER BY version`);
@@ -134,7 +134,7 @@ describe('AC-09 secret ballot with eligibility, one vote each, quorum and thresh
     const { castVote } = await import('../src/services/governance.js');
     const { tx } = await import('../src/lib.js');
     const ms = await q<any>(pool, `SELECT id FROM members WHERE verified_at IS NOT NULL LIMIT 5`);
-    await tx(async (db) => { for (const [i, m] of ms.entries()) await castVote(db, { userId: null as any, name: 'x', roles: ['member'], memberId: m.id, mfaPassed: true }, p.id, i < 3 ? 'yes' : 'no'); });
+    await tx(async (db) => { for (const [i, m] of ms.entries()) await castVote(db, { userId: null as any, name: 'x', roles: ['member'], memberId: m.id, mfaPassed: true, extra: ['vote'] }, p.id, i < 3 ? 'yes' : 'no'); });
     expect((await akosua.post(`/api/proposals/${p.id}/close`)).json().result).toBe('not_passed'); // 60% < 66.7%
   });
 });

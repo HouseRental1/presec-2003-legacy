@@ -89,7 +89,8 @@ export async function buildApp() {
   app.post('/api/auth/mfa/confirm', write(z.object({ code: z.string().regex(/^\d{6}$/) }), (db, a, b) => M.confirmMfaEnrolment(db, a, b.code)));
   app.get('/api/me', read(async (a) => {
     const member = a.memberId ? await one(pool, `SELECT m.member_no, m.full_name, m.show_on_wall, hm.house_id FROM members m JOIN house_memberships hm ON hm.member_id=m.id AND hm.valid_to IS NULL WHERE m.id=$1`, [a.memberId]) : null;
-    return { ...a, perms: [...perms(a)], member, mfaRequired: config.requireMfa };
+    const [part] = await q<any>(pool, `SELECT value FROM settings WHERE key='member_participation'`);
+    return { ...a, perms: [...perms(a)], member, mfaRequired: config.requireMfa, access: a.roles.includes('admin') ? 'admin' : 'member', memberParticipation: part?.value === true };
   }));
 
   /* public page — only approved figures, no individual amounts */
@@ -228,6 +229,8 @@ export async function buildApp() {
   app.get('/api/admin/staff', read((a) => A.listStaff(pool, a)));
   app.post('/api/admin/import-members', write(A.ImportMembersInput, (db, a, b) => A.importMembers(db, a, b)));
   app.post('/api/admin/members/:id/invite', write(null, (db, a, _b, r) => A.resendInvite(db, a, id(r))));
+  app.post('/api/admin/access', write(A.AccessInput, (db, a, b) => A.setAccess(db, a, b)));
+  app.post('/api/admin/participation', write(A.ParticipationInput, (db, a, b) => A.setParticipation(db, a, b)));
   app.post('/api/admin/roles', write(z.object({ userId: z.string().uuid(), role: z.enum(['admin', 'committee', 'treasurer', 'approver', 'auditor', 'pm', 'captain', 'school']), grant: z.boolean(), expiresAt: z.string().optional() }),
     (db, a, b) => b.grant ? M.grantRole(db, a, b.userId, b.role, b.expiresAt) : A.revokeRole(db, a, b.userId, b.role)));
   app.post('/api/admin/roles-by-member', write(z.object({ memberNo: z.string(), role: z.enum(['committee', 'treasurer', 'approver', 'auditor', 'pm', 'school', 'admin']), expiresAt: z.string().optional() }), async (db, a, b) => {

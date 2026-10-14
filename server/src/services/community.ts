@@ -54,7 +54,7 @@ export async function createEvent(db: Db, actor: Actor, input: z.infer<typeof Ev
 }
 export const RsvpInput = z.object({ response: z.enum(['yes', 'no', 'maybe']), guests: z.number().int().min(0).max(5).default(0) });
 export async function rsvp(db: Db, actor: Actor, eventId: number, input: z.infer<typeof RsvpInput>) {
-  need(actor, 'own', 'reply to events');
+  need(actor, 'rsvp', 'reply to events');
   if (!actor.memberId) throw forbid('Only members can RSVP.');
   await one(db, 'SELECT id FROM events WHERE id=$1', [eventId]);
   await db.query(`INSERT INTO event_rsvps (event_id, member_id, response, guests) VALUES ($1,$2,$3,$4)

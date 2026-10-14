@@ -121,7 +121,8 @@ export function safeEqualHex(a: string, b: string) {
 /* ───────────────────────── permissions */
 export type Role = 'admin' | 'committee' | 'treasurer' | 'approver' | 'auditor' | 'pm' | 'captain' | 'member' | 'school';
 export const PERMS: Record<Role, string[]> = {
-  member: ['own', 'pay', 'vote', 'dir', 'proj.view'],
+  // Members (non-admin): view everything shared with the year group; the only actions are pledging and paying their own contributions.
+  member: ['own', 'pay', 'dir', 'proj.view'],
   captain: ['house.tools'],
   treasurer: ['fin.view', 'fin.record', 'fin.verify', 'fin.release', 'fin.reconcile', 'reports'],
   approver: ['fin.view', 'fin.verify', 'req.approve', 'reports'],
@@ -136,9 +137,14 @@ export const PRIVILEGED: Role[] = ['admin', 'committee', 'treasurer', 'approver'
 
 export interface Actor {
   userId: string; name: string; roles: Role[]; memberId: string | null; mfaPassed: boolean;
+  /** Extra permissions switched on by settings (e.g. member voting). */
+  extra?: string[];
 }
-export const perms = (a: Actor) => new Set(a.roles.flatMap((r) => PERMS[r] ?? []));
-const BASIC = new Set(['own', 'pay', 'vote', 'dir', 'proj.view']);
+export const perms = (a: Actor) => new Set([...a.roles.flatMap((r) => PERMS[r] ?? []), ...(a.extra ?? [])]);
+/** The two access levels shown in the app. "Admin" is this bundle of roles; everyone else is a view-only member. */
+export const ADMIN_BUNDLE: Role[] = ['admin', 'committee', 'treasurer', 'approver', 'pm'];
+export const isAdmin = (a: Actor) => a.roles.includes('admin');
+const BASIC = new Set(['own', 'pay', 'vote', 'rsvp', 'dir', 'proj.view']);
 /** Server-side permission check. Every service function calls this; hiding a button is never enough. */
 export function need(a: Actor, perm: string, what: string) {
   if (!perms(a).has(perm)) throw forbid(`Your role cannot ${what}.`);

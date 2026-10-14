@@ -6,7 +6,7 @@ import { TriBars } from './Home';
 import { LifecycleTab, DetailsTab, UpdatesTab } from './Lifecycle';
 
 export default function Project() {
-  const { can } = useSession();
+  const { can, me } = useSession();
   const p = useLoad<any>('/project');
   const lc = useLoad<any>('/project/lifecycle');
   const act = useAction(); const toast = useToast(); const [dialog, open] = useDialog();
@@ -19,7 +19,7 @@ export default function Project() {
       <p className="small muted" style={{ marginTop: 4 }}>{(() => { const c = lc.data.phases.find((x: any) => x.key === lc.data.currentPhase); return c ? `Current phase: ${c.seq}. ${c.name} · ${c.closed}/${c.total} items closed` : ''; })()}</p></div>
     {tab !== 'lifecycle' && tab !== 'details' && tab !== 'updates' && <div className="grid-2"><div className="card"><h2 style={{ marginBottom: 10 }}>Construction progress by evidence</h2><TriBars p={d.progress} /></div>
       <div className="card"><dl className="kv"><dt>Contract</dt><dd>{d.contract ? `${d.contract.id} · ${d.contract.supplier}` : 'Not signed yet'}</dd><dt>Contract sum</dt><dd>{d.contract ? ghs(d.contract.value) : '—'}</dd><dt>Programme</dt><dd>{d.contract ? `${date(d.contract.start_on)} – ${date(d.contract.end_on)}` : '—'}</dd><dt>Retention</dt><dd>{d.contract ? `${d.contract.retention_bp / 100}% of each certificate` : '—'}</dd><dt>Budget</dt><dd>{d.budgetVersions.length ? `v${d.budgetVersions.at(-1).version} · ${ghs(d.budgetVersions.at(-1).total)}` : 'No approved baseline yet'}</dd></dl></div></div>}
-    <div className="tabs" role="tablist">{[['lifecycle', 'Lifecycle'], ['details', 'Details'], ['updates', 'Updates'], ['works', 'Construction'], ['photos', 'Site photos'], ['budget', 'Budget & variations'], ['quality', 'Inspections, defects, risks']].map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}</div>
+    <div className="tabs" role="tablist">{(me?.access === 'admin' ? [['lifecycle', 'Lifecycle'], ['details', 'Details'], ['updates', 'Updates'], ['works', 'Construction'], ['photos', 'Site photos'], ['budget', 'Budget & variations'], ['quality', 'Inspections, defects, risks']] : [['lifecycle', 'Progress'], ['works', 'Construction'], ['photos', 'Site photos'], ['updates', 'Updates']]).map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}</div>
     {tab === 'lifecycle' && <LifecycleTab lc={lc.data} reload={() => { lc.reload(); p.reload(); }} />}
     {tab === 'details' && <DetailsTab lc={lc.data} reload={lc.reload} />}
     {tab === 'updates' && <UpdatesTab lc={lc.data} reload={lc.reload} />}

@@ -31,7 +31,10 @@ export async function actorFromToken(db: Db | any, token: string | undefined) {
     LEFT JOIN members m ON m.user_id=u.id WHERE s.token_hash=$1 AND s.expires_at > now()`, [sha256(token)]);
   if (!s || s.status !== 'active') return null;
   const roles = (await q<any>(db, 'SELECT role FROM user_roles WHERE user_id=$1 AND (expires_at IS NULL OR expires_at > now())', [s.user_id])).map((r) => r.role as Role);
-  return { userId: s.user_id, name: s.display_name, roles, memberId: s.member_id, mfaPassed: s.mfa_passed } as Actor;
+  // Voting and event replies are open to members only when the administrators switch member participation on.
+  const [part] = await q<any>(db, `SELECT value FROM settings WHERE key='member_participation'`);
+  const extra = part?.value === true && roles.includes('member') ? ['vote', 'rsvp'] : [];
+  return { userId: s.user_id, name: s.display_name, roles, memberId: s.member_id, mfaPassed: s.mfa_passed, extra } as Actor;
 }
 export async function logout(db: Db, token: string) { await db.query('DELETE FROM sessions WHERE token_hash=$1', [sha256(token)]); }
 

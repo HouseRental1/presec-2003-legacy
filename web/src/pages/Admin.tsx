@@ -8,7 +8,7 @@ const ROLES: [string, string][] = [['committee', 'Executive committee'], ['treas
 
 export default function Admin() {
   const { can } = useSession();
-  const tabs = ([['register', 'Year-group register', can('admin.members')], ['staff', 'Roles & captains', can('admin.members')], ['controls', 'Controls & rules', can('rules.edit')], ['ballots', 'Ballots', can('gov.manage')], ['project', 'Project set-up', can('rules.edit') || can('proj.edit')], ['exports', 'Exports', can('reports') || can('admin.members')]] as const).filter((t) => t[2]);
+  const tabs = ([['register', 'Year-group register', can('admin.members')], ['staff', 'Access & captains', can('admin.members')], ['controls', 'Controls & rules', can('rules.edit')], ['ballots', 'Ballots', can('gov.manage')], ['project', 'Project set-up', can('rules.edit') || can('proj.edit')], ['exports', 'Exports', can('reports') || can('admin.members')]] as const).filter((t) => t[2]);
   const [tab, setTab] = useState<string>(tabs[0]?.[0] ?? '');
   if (!tabs.length) return <div className="callout warn">Administration is for the committee, the administrator and finance roles.</div>;
   return <div className="stack"><div><div className="eyebrow">Run by the committee for the year group</div><h1>Administration</h1></div>
@@ -35,15 +35,36 @@ function Register() {
 
 function Staff() {
   const s = useLoad<any[]>('/admin/staff'); const act = useAction(); const toast = useToast(); const [dialog, open] = useDialog();
+  const { me, reload } = useSession();
+  const admins = (s.data ?? []).filter((u) => u.roles.includes('admin'));
+  const captains = (s.data ?? []).filter((u) => u.captain_of?.length);
+  const setAccess = (who: string, access: 'admin' | 'member', after = s.reload) => api.post('/admin/access', { who, access }).then((r: any) => { toast(`${r.name} is now ${access === 'admin' ? 'an administrator' : 'a member (view-only)'}.`); after(); });
   return <div className="stack">{dialog}
-    <div className="row"><button className="btn" onClick={() => open({ title: 'Give a role to a classmate', submit: 'Grant role', fields: [{ name: 'memberNo', label: 'Member number', required: true }, { name: 'role', label: 'Role', type: 'select', options: ROLES, value: 'committee' }, { name: 'expiresAt', label: 'Until (optional)', type: 'date' }], onSubmit: (v) => api.post('/admin/roles-by-member', v).then(() => { toast('Role granted.'); s.reload(); }) })}>Give a role to a classmate</button><button className="btn primary" onClick={() => open({ title: 'Appoint a house captain', submit: 'Appoint', fields: [{ name: 'houseId', label: 'House', type: 'select', options: HOUSE_OPTS, value: 'H1' }, { name: 'memberNo', label: 'Member number', required: true }], onSubmit: (v) => api.post('/admin/captains', v).then(() => { toast('Captain appointed.'); s.reload(); }) })}>Appoint a house captain</button></div>
-    <Gate error={s.error}><div className="card"><div className="tablewrap"><table><thead><tr><th>Name</th><th>Email</th><th>Roles</th><th>2FA</th><th /></tr></thead><tbody>
-      {(s.data ?? []).map((u) => <tr key={u.id}><td><b>{u.display_name}</b>{u.status === 'suspended' && <> <Pill k="bad">Suspended</Pill></>}</td><td className="small">{u.email}</td>
-        <td><div className="row">{u.roles.filter((r: string) => r !== 'member').map((r: string) => <span key={r} className="pill">{r}{u.captain_of && r === 'captain' ? ' · ' + u.captain_of.map((h: string) => HOUSE_NAME[h]).join(', ') : ''} <button className="btn sm" style={{ padding: '0 6px', marginLeft: 4 }} aria-label={`Remove ${r}`} onClick={() => act(() => api.post('/admin/roles', { userId: u.id, role: r, grant: false }), 'Role removed.', s.reload)}>×</button></span>)}</div></td>
-        <td>{u.mfa ? <Pill k="ok">On</Pill> : <Pill k="warn">Not set</Pill>}</td>
-        <td><div className="row"><button className="btn sm" onClick={() => open({ title: 'Give a role to ' + u.display_name, submit: 'Grant', fields: [{ name: 'role', label: 'Role', type: 'select', options: ROLES, value: 'committee' }, { name: 'expiresAt', label: 'Until (optional, for temporary delegation)', type: 'date' }], onSubmit: (v) => api.post('/admin/roles', { userId: u.id, role: v.role, grant: true, expiresAt: v.expiresAt }).then(() => { toast('Role granted.'); s.reload(); }) })}>Add role</button>
-          <button className="btn sm danger" onClick={() => act(() => api.post(`/admin/users/${u.id}/suspend`, { suspended: u.status !== 'suspended' }), 'Updated.', s.reload)}>{u.status === 'suspended' ? 'Restore' : 'Suspend'}</button></div></td></tr>)}
-    </tbody></table></div><p className="def" style={{ marginTop: 8 }}>A classmate needs an account (an accepted invitation) before they can hold a role. Administrators are capped at 3, and role changes sign the person out so they take effect at once.</p></div></Gate></div>;
+    <div className="card stack"><div className="card-h"><h2>Who can do what</h2></div>
+      <div className="grid-2">
+        <div><b>Admin</b><p className="small muted" style={{ margin: '4px 0 0' }}>Everything: the register, money in and out, the project, votes, news and settings. Opens on the Administration page after sign-in. Payments out still need two different admins to approve.</p></div>
+        <div><b>Member</b> (everyone else)<p className="small muted" style={{ margin: '4px 0 0' }}>View-only: home, houses and contributions, project progress and photos, year group, news. The only things a member can do are make a pledge and pay their own contributions.</p></div>
+      </div>
+      <label className="row" style={{ gap: 8, alignItems: 'center' }}><input type="checkbox" style={{ width: 'auto' }} checked={!!me?.memberParticipation}
+        onChange={(e) => act(() => api.post('/admin/participation', { on: e.target.checked }), e.target.checked ? 'Members can now vote and reply to events.' : 'Voting and event replies are now admin-only.', reload)} />
+        <span className="small">Also let members vote on ballots and reply to events <span className="muted">(off by default)</span></span></label>
+    </div>
+    <div className="card stack"><div className="card-h"><h2>Administrators</h2>
+      <button className="btn primary" onClick={() => open({ title: 'Make a classmate an administrator', submit: 'Make admin', intro: <p className="small muted">They need an account first (added with an email address). The change applies at their next sign-in.</p>,
+        fields: [{ name: 'who', label: 'Member number or email', required: true }], onSubmit: (v) => setAccess(v.who, 'admin') })}>Make someone admin</button></div>
+      <Gate error={s.error}><div className="tablewrap"><table><thead><tr><th>Name</th><th>Email</th><th>Two-factor</th><th /></tr></thead><tbody>
+        {admins.map((u) => <tr key={u.id}><td><b>{u.display_name}</b>{u.id === me?.userId && <span className="muted small"> (you)</span>}{u.status === 'suspended' && <> <Pill k="bad">Suspended</Pill></>}</td><td className="small">{u.email}</td>
+          <td>{u.mfa ? <Pill k="ok">On</Pill> : <Pill k="warn">Not set</Pill>}</td>
+          <td>{u.id !== me?.userId && <div className="row"><button className="btn sm" onClick={() => act(() => setAccess(u.email, 'member'), 'Done.')}>Change to member</button>
+            <button className="btn sm danger" onClick={() => act(() => api.post(`/admin/users/${u.id}/suspend`, { suspended: u.status !== 'suspended' }), 'Updated.', s.reload)}>{u.status === 'suspended' ? 'Restore' : 'Suspend'}</button></div>}</td></tr>)}
+      </tbody></table></div>
+      <p className="def" style={{ marginTop: 8 }}>Up to 3 administrators. You cannot change your own access, and the last administrator cannot be removed.</p></Gate>
+    </div>
+    <div className="card stack"><div className="card-h"><h2>House captains</h2>
+      <button className="btn" onClick={() => open({ title: 'Appoint a house captain', submit: 'Appoint', fields: [{ name: 'houseId', label: 'House', type: 'select', options: HOUSE_OPTS, value: 'H1' }, { name: 'memberNo', label: 'Member number', required: true }], onSubmit: (v) => api.post('/admin/captains', v).then(() => { toast('Captain appointed.'); s.reload(); }) })}>Appoint a captain</button></div>
+      {captains.length ? captains.map((u) => <div className="li" key={u.id}><div className="grow"><b>{u.display_name}</b> · {u.captain_of.map((h: string) => HOUSE_NAME[h]).join(', ')}</div></div>) : <p className="small muted" style={{ margin: 0 }}>No captains yet.</p>}
+      <p className="def">Captains are members with one extra: they see which housemates have not yet given and can send them a friendly reminder.</p>
+    </div></div>;
 }
 
 function Controls() {

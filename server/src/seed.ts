@@ -39,11 +39,11 @@ export async function seed({ members = 380, quiet = false } = {}) {
   await tx(async (db) => {
     for (const [code, a] of Object.entries(ACCOUNTS)) await db.query('INSERT INTO ledger_accounts VALUES ($1,$2,$3)', [code, a.name, a.normal]);
     const settings: Record<string, unknown> = {
-      dual_approval_above: 5_000_000, member_vote_above: 10_000_000, admin_cap: 3, quorum_bp: 3000,
+      dual_approval_above: 5_000_000, member_vote_above: 10_000_000, admin_cap: 3, quorum_bp: 3000, member_participation: true,
       fees: { momo_bp: 100, card_bp: 250 }, fx_indicative: { GHS: 1, USD: 15.6, GBP: 20.4 },
       custody: { entity: 'Registered association — name and number to confirm', signatories: '2 of 3 named signatories (to confirm)' },
     };
-    for (const [k, v] of Object.entries(settings)) await db.query('INSERT INTO settings VALUES ($1,$2)', [k, JSON.stringify(v)]);
+    for (const [k, v] of Object.entries(settings)) await db.query('INSERT INTO settings VALUES ($1,$2) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value', [k, JSON.stringify(v)]);
     for (const [id, name] of [['H1', 'Kwansa'], ['H2', 'Clerk'], ['H3', 'Engmann'], ['H4', 'Akro'], ['H5', 'Riis'], ['H6', 'Labone'], ['H7', 'Ako-Adjei'], ['H8', 'Owusu-Parry']]) await db.query('INSERT INTO houses VALUES ($1,$2)', [id, name]);
     await db.query(`INSERT INTO projects VALUES ('P1','Legacy Project 1: six-unit classroom block, PRESEC Legon','construction')`);
     await db.query(`UPDATE projects SET site='PRESEC Legon campus, Accra', sponsor='Ɔdadeɛ 2003 year group (executive committee)', school_contact='Headmaster’s office, PRESEC Legon',
@@ -74,7 +74,7 @@ export async function seed({ members = 380, quiet = false } = {}) {
         n++; const [m] = await q<any>(db, `INSERT INTO members (member_no, user_id, full_name, city, verified_at) VALUES ($1,$2,$3,'Accra',now()) RETURNING id`, ['P03-' + String(n).padStart(4, '0'), u.id, s.name]);
         memberId = m.id; await db.query(`INSERT INTO house_memberships (member_id, house_id, valid_from, reason) VALUES ($1,$2,'2000-01-01','Registered from school records')`, [m.id, s.house]);
       }
-      users[s.key] = { userId: u.id, name: s.name, roles: [...s.roles] as Role[], memberId, mfaPassed: true };
+      users[s.key] = { userId: u.id, name: s.name, roles: [...s.roles] as Role[], memberId, mfaPassed: true, extra: ['vote', 'rsvp'] };
     }
     await db.query(`INSERT INTO house_captains VALUES ('H2',$1)`, [users.abena.userId]);
     // Kwabena Tetteh: member who owns a bidding firm (conflict of interest)
@@ -130,7 +130,7 @@ export async function seed({ members = 380, quiet = false } = {}) {
       if (R() < 0.45 || m.member_no === 'P03-0001') await db.query(`INSERT INTO pledges (member_id, project_id, amount, instalments, status) VALUES ($1,'P1',$2,$3,'active')`, [m.id, m.member_no === 'P03-0001' ? 300000 : pick([1000, 1500, 2000, 2500, 3000, 5000]) * 100, pick([3, 5, 6, 10])]);
     }
   });
-  const fakeMember = (m: any): Actor => ({ userId: m.user_id ?? (null as any), name: m.member_no, roles: ['member'], memberId: m.id, mfaPassed: true });
+  const fakeMember = (m: any): Actor => ({ userId: m.user_id ?? (null as any), name: m.member_no, roles: ['member'], memberId: m.id, mfaPassed: true, extra: ['vote', 'rsvp'] });
   let k = 0;
   for (const m of members_) {
     if (m.member_no !== 'P03-0001' && R() >= prob[m.house_id]) continue;

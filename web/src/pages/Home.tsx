@@ -8,11 +8,11 @@ export function TriBars({ p }: { p: { reported: number; verified: number; accept
 }
 
 export default function Home() {
-  const { me } = useSession();
+  const { me, can } = useSession();
   const d = useLoad<any>('/dashboard'), s = useLoad<any>('/standings'), v = useLoad<any[]>('/proposals');
   if (!d.data) return <Gate error={d.error}><p className="muted">Loading…</p></Gate>;
   const x = d.data;
-  const open = (v.data ?? []).filter((p) => p.status === 'open' && !p.i_voted);
+  const open = !can('vote') ? [] : (v.data ?? []).filter((p) => p.status === 'open' && !p.i_voted);
   return <div className="stack">
     <div><div className="eyebrow">{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</div><h1>Welcome, {me!.name.split(' ')[0]}</h1></div>
     <div className="grid-2">

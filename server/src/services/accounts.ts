@@ -1,6 +1,6 @@
 /** Invitations, password reset, profile and role management. */
 import { z } from 'zod';
-import { Actor, Db, q, one, need, audit, notify, conflict, invalid, forbid, hashPassword, verifyPassword, newToken, sha256, config, Role, AppError } from '../lib.js';
+import { Actor, Db, q, one, need, audit, notify, conflict, invalid, forbid, hashPassword, verifyPassword, newToken, sha256, config, Role, AppError, ADMIN_BUNDLE } from '../lib.js';
 import { normaliseGhanaPhone } from './messaging.js';
 
 const PASSWORD = z.string().min(10, 'Use at least 10 characters.').max(200);
@@ -165,4 +165,34 @@ export async function setSuspended(db: Db, actor: Actor, userId: string, suspend
   await db.query('UPDATE users SET status=$2 WHERE id=$1', [userId, suspended ? 'suspended' : 'active']);
   if (suspended) await db.query('DELETE FROM sessions WHERE user_id=$1', [userId]);
   await audit(db, actor, suspended ? 'Suspended account' : 'Restored account', userId);
+}
+
+/* ───────── two access levels: Admin (full) or Member (view-only, can pledge and pay) */
+export const AccessInput = z.object({ who: z.string().min(3, 'Enter a member number or email.'), access: z.enum(['admin', 'member']) });
+export async function setAccess(db: Db, actor: Actor, input: z.infer<typeof AccessInput>) {
+  need(actor, 'admin.members', 'change access');
+  const who = input.who.trim();
+  const u = (await q<any>(db, `SELECT u.id, u.display_name FROM users u LEFT JOIN members m ON m.user_id=u.id WHERE lower(u.email)=lower($1) OR m.member_no=upper($1)`, [who]))[0];
+  if (!u) throw invalid('No account found for that member number or email. The classmate needs an account (an email on the register) first.');
+  if (u.id === actor.userId) throw forbid('You cannot change your own access. Ask another administrator.');
+  if (input.access === 'admin') {
+    const cap = Number((await q<any>(db, `SELECT value FROM settings WHERE key='admin_cap'`))[0]?.value ?? 3);
+    const [{ n }] = await q<any>(db, `SELECT count(*)::int n FROM user_roles WHERE role='admin' AND user_id<>$1 AND (expires_at IS NULL OR expires_at > now())`, [u.id]);
+    if (n >= cap) throw conflict(`There are already ${n} administrators (limit ${cap}). Remove one first.`);
+    for (const r of ADMIN_BUNDLE) await db.query('INSERT INTO user_roles (user_id, role, granted_by) VALUES ($1,$2,$3) ON CONFLICT (user_id, role) DO NOTHING', [u.id, r, actor.userId]);
+  } else {
+    const [{ n }] = await q<any>(db, `SELECT count(*)::int n FROM user_roles WHERE role='admin' AND user_id<>$1`, [u.id]);
+    if (n < 1) throw conflict('The platform must keep at least one administrator.');
+    await db.query(`DELETE FROM user_roles WHERE user_id=$1 AND role IN ('admin','committee','treasurer','approver','pm','auditor')`, [u.id]);
+  }
+  await db.query(`INSERT INTO user_roles (user_id, role, granted_by) VALUES ($1,'member',$2) ON CONFLICT DO NOTHING`, [u.id, actor.userId]);
+  await db.query('DELETE FROM sessions WHERE user_id=$1', [u.id]);   // takes effect at their next sign-in
+  await audit(db, actor, input.access === 'admin' ? 'Made administrator' : 'Removed administrator access', u.id, u.display_name);
+  return { name: u.display_name, access: input.access };
+}
+export const ParticipationInput = z.object({ on: z.boolean() });
+export async function setParticipation(db: Db, actor: Actor, input: z.infer<typeof ParticipationInput>) {
+  need(actor, 'admin.members', 'change member participation');
+  await db.query(`INSERT INTO settings (key, value) VALUES ('member_participation', $1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, [JSON.stringify(input.on)]);
+  await audit(db, actor, 'Member voting and event replies', input.on ? 'on' : 'off');
 }

@@ -17,11 +17,19 @@ import Community from './pages/Community';
 import Admin from './pages/Admin';
 import { Link, useLocation } from 'react-router-dom';
 
-const NAV: [string, string, string?][] = [
-  ['/', 'Home'], ['/money', 'Money'], ['/houses', 'Houses'], ['/project', 'Classroom project', 'proj.view'], ['/votes', 'Votes', 'vote'],
-  ['/members', 'Year group', 'dir'], ['/community', 'News & events', 'own'], ['/legacy', 'Legacy archive', 'proj.view'], ['/notifications', 'Notifications'],
-  ['/audit', 'Audit trail', 'audit.view'], ['/admin', 'Administration', 'admin'], ['/give', 'Public page'],
+/** Administrators: everything, starting at the administration dashboard. */
+const ADMIN_NAV: [string, string, string?][] = [
+  ['/admin', 'Administration'], ['/', 'Home'], ['/money', 'Money'], ['/houses', 'Houses'], ['/project', 'Classroom project'], ['/votes', 'Votes'],
+  ['/members', 'Year group'], ['/community', 'News & events'], ['/legacy', 'Legacy archive'], ['/notifications', 'Notifications'],
+  ['/audit', 'Audit trail'], ['/give', 'Public page'],
 ];
+/** Members: view-only, plus pledging and paying their own contributions. */
+const MEMBER_NAV: [string, string, string?][] = [
+  ['/', 'Home'], ['/money', 'My pledge & giving'], ['/houses', 'Houses'], ['/project', 'Project progress'], ['/votes', 'Votes', 'vote'],
+  ['/members', 'Year group'], ['/community', 'News & events'], ['/legacy', 'Legacy archive'], ['/notifications', 'Notifications'], ['/give', 'Public page'],
+];
+const ADMIN_TABS = [['/admin', 'Admin'], ['/', 'Home'], ['/money', 'Money'], ['/houses', 'Houses'], ['/project', 'Project']];
+const MEMBER_TABS = [['/', 'Home'], ['/money', 'Give'], ['/houses', 'Houses'], ['/project', 'Project'], ['/members', 'Year group']];
 
 function FirstAdmin({ onDone, recover = false, onCancel }: { onDone: () => void; recover?: boolean; onCancel?: () => void }) {
   const [f, setF] = useState({ name: '', email: '', password: '', password2: '', code: '' });
@@ -48,6 +56,9 @@ function FirstAdmin({ onDone, recover = false, onCancel }: { onDone: () => void;
   </form></div>;
 }
 
+/** Set on a successful sign-in so the layout can send the person to their own area once. */
+let justSignedIn = false;
+
 function Login() {
   const [setup, setSetup] = useState<{ database: string; needsSetup: boolean; canRecover?: boolean } | null>(null);
   const [created, setCreated] = useState(false), [recovering, setRecovering] = useState(false);
@@ -58,7 +69,12 @@ function Login() {
   const forgot = async () => { if (!email) return setErr('Enter your email first.'); await api.post('/auth/forgot', { email }).catch(() => {}); setSent(true); setErr(''); };
   const submit = async (e: React.FormEvent) => {
     e.preventDefault(); setBusy(true); setErr('');
-    try { await api.post('/auth/login', { email, password, ...(code ? { code } : {}) }); await reload(); }
+    try {
+      await api.post('/auth/login', { email, password, ...(code ? { code } : {}) });
+      // Send each person to their own area: administrators to Administration, members to Home.
+      justSignedIn = true;
+      await reload();
+    }
     catch (x) { const a = x as ApiError; if (a.code === 'mfa_required') setNeedCode(true); setErr(a.message); }
     finally { setBusy(false); }
   };
@@ -87,8 +103,10 @@ function Shell() {
   if (loc.pathname === '/pay/return') return <PayReturn />;
   if (loc.pathname === '/set-password') return <SetPassword />;
   if (!me) return <Login />;
-  const isAdmin = can('admin.members') || can('rules.edit') || can('gov.manage') || can('reports');
-  const items = NAV.filter(([, , p]) => !p || (p === 'admin' ? isAdmin : can(p)));
+  const isAdmin = me.access === 'admin';
+  if (justSignedIn) { justSignedIn = false; const home = isAdmin ? '/admin' : '/'; if (loc.pathname !== home && (loc.pathname === '/' || loc.pathname === '/admin')) return <Navigate to={home} replace />; }
+  const items = (isAdmin ? ADMIN_NAV : MEMBER_NAV).filter(([, , p]) => !p || can(p));
+  const memberOnly = (el: ReactNode) => isAdmin ? el : <Navigate to="/" replace />;
   return <div className="app">
     <aside className="rail" aria-label="Main navigation">
       <div className="brandmark"><div className="seal">03</div><div><b>Class of 2003 Legacy</b><span>PRESEC Legon · Ɔdadeɛ 2003</span></div></div>
@@ -96,18 +114,18 @@ function Shell() {
     </aside>
     <main className="main">
       <div className="topbar">
-        <Link to="/profile" style={{ color: 'inherit', textDecoration: 'none' }}><b>{me.name}</b> <span className="muted small">{me.roles.join(' · ')}{me.member ? ' · ' + me.member.member_no : ''}</span></Link>
+        <Link to="/profile" style={{ color: 'inherit', textDecoration: 'none' }}><b>{me.name}</b> <span className={'pill ' + (isAdmin ? 'ok' : '')} style={{ marginLeft: 6 }}>{isAdmin ? 'Admin' : 'Member'}</span> <span className="muted small">{''}{me.member ? ' · ' + me.member.member_no : ''}</span></Link>
         <div className="row">{me.mfaRequired && !me.mfaPassed && me.roles.some((r) => r !== 'member') && <Link className="pill warn" to="/profile">Set up two-factor sign-in</Link>}<button className="btn sm" onClick={signOut}>Sign out</button></div>
       </div>
       <Routes>
         <Route path="/" element={<Home />} /><Route path="/money" element={<Money />} /><Route path="/houses" element={<Houses />} />
-        <Route path="/project" element={<Project />} /><Route path="/votes" element={<Votes />} /><Route path="/members" element={<Members />} />
-        <Route path="/profile" element={<Profile />} /><Route path="/community" element={<Community />} /><Route path="/admin" element={<Admin />} />
-        <Route path="/legacy" element={<Legacy />} /><Route path="/notifications" element={<Notifications />} /><Route path="/audit" element={<Audit />} />
+        <Route path="/project" element={<Project />} /><Route path="/votes" element={isAdmin || can('vote') ? <Votes /> : <Navigate to="/" replace />} /><Route path="/members" element={<Members />} />
+        <Route path="/profile" element={<Profile />} /><Route path="/community" element={<Community />} /><Route path="/admin" element={memberOnly(<Admin />)} />
+        <Route path="/legacy" element={<Legacy />} /><Route path="/notifications" element={<Notifications />} /><Route path="/audit" element={memberOnly(<Audit />)} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </main>
-    <nav className="tabbar" aria-label="Main navigation">{[['/', 'Home'], ['/money', 'Money'], ['/houses', 'Houses'], ['/project', 'Project'], ['/votes', 'Votes']].map(([to, l]) => <NavLink key={to} to={to} end={to === '/'}>{l}</NavLink>)}</nav>
+    <nav className="tabbar" aria-label="Main navigation">{(isAdmin ? ADMIN_TABS : MEMBER_TABS).map(([to, l]) => <NavLink key={to} to={to} end={to === '/'}>{l}</NavLink>)}</nav>
   </div>;
 }
 
