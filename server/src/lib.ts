@@ -15,7 +15,7 @@ export const config = {
   webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET ?? 'dev-webhook-secret',
   sessionHours: Number(process.env.SESSION_HOURS ?? 12),
   loginRateMax: Number(process.env.LOGIN_RATE_MAX ?? 10),   // sign-in attempts per IP per minute
-  appUrl: process.env.APP_URL ?? 'http://localhost:5173',          // public URL of the web app (links in messages, payment return)
+  appUrl: process.env.APP_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL ? 'https://' + process.env.VERCEL_PROJECT_PRODUCTION_URL : 'http://localhost:5173'),          // public URL of the web app (links in messages, payment return)
   paymentProvider: (process.env.PAYMENT_PROVIDER ?? 'sandbox') as 'sandbox' | 'paystack',
   paystackSecret: process.env.PAYSTACK_SECRET_KEY ?? '',
   paystackApi: process.env.PAYSTACK_API ?? 'https://api.paystack.co',

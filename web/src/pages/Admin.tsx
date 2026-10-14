@@ -30,6 +30,9 @@ function Register() {
     <textarea className="mono" rows={8} value={text} onChange={(e) => setText(e.target.value)} style={{ width: '100%', border: '1px solid var(--line)', borderRadius: 8, padding: 10, background: 'var(--surface-2)' }} />
     <div className="row"><button className="btn primary" onClick={() => act(async () => setRes(await api.post('/admin/import-members', { rows: parse(), sendInvites: true })), 'Import finished.')}>Import and send invitations</button></div>
     {res && <div className={'callout ' + (res.skipped.length ? 'warn' : 'ok')}>{res.created} imported. {res.skipped.length ? 'Skipped: ' + res.skipped.map((s: any) => `${s.memberNo} (${s.reason})`).join(', ') : ''}</div>}
+    {res?.invites?.length > 0 && !(res.delivery?.email || res.delivery?.sms) && <div className="card stack" style={{ background: 'var(--surface-2)', boxShadow: 'none' }}>
+      <b>Invitation links to share</b><p className="small muted" style={{ margin: 0 }}>Email and SMS are not connected yet, so share each link yourself (each works once, for 14 days).</p>
+      <textarea readOnly rows={Math.min(10, res.invites.length + 1)} className="mono" style={{ width: '100%' }} value={res.invites.map((i: any) => `${i.name}: ${i.link}`).join('\n')} onFocus={(e) => e.target.select()} /></div>}
     <p className="def">Houses: {HOUSE_OPTS.map(([, n]) => n).join(' · ')}</p></div></div>;
 }
 

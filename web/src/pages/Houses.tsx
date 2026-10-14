@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { InviteSheet, Invite } from '../forms';
 import { Link } from 'react-router-dom';
 import { api, ghs, pct, date, HOUSE_BASE, HOUSE_COLOR, HOUSE_NAME } from '../api';
 import { useDialog } from '../forms';
@@ -16,6 +17,7 @@ export default function Houses() {
   const [dialog, open] = useDialog();
   const [sel, setSel] = useState<string>('');
   const [rosterKey, setRosterKey] = useState(0);
+  const [invite, setInvite] = useState<Invite | null>(null);
   useEffect(() => { if (!sel && hs.data?.length) setSel(me?.member?.house_id ?? hs.data[0].id); }, [hs.data]); // eslint-disable-line
   if (ov.error) return <Gate error={ov.error}>{null}</Gate>;
   if (!hs.data) return <p className="muted">Loading…</p>;
@@ -38,7 +40,7 @@ export default function Houses() {
       { name: 'city', label: 'City / country' }, { name: 'profession', label: 'Profession' },
       { name: 'memberNo', label: 'Member number', hint: 'Leave blank to number automatically (P03-0001, P03-0002 …).' },
     ],
-    onSubmit: async (v) => { const r = await api.post<any>('/houses/members', { ...v, isMe, sendInvite: true }); toast(isMe ? `You are on the register as ${r.memberNo}.` : `Added as ${r.memberNo}${r.invited ? ' and invited' : ''}.`); refresh(); if (isMe) reloadMe(); },
+    onSubmit: async (v) => { const r = await api.post<any>('/houses/members', { ...v, isMe, sendInvite: true }); toast(isMe ? `You are on the register as ${r.memberNo}.` : `Added as ${r.memberNo}.`); refresh(); if (isMe) reloadMe(); if (r.link) setInvite({ name: v.fullName, link: r.link, delivery: r.delivery }); },
   });
 
   return <div className="stack">
@@ -87,7 +89,7 @@ export default function Houses() {
         {standing[house.id] && <div><span className="def">This competition period</span><b className="num">{ghs(standing[house.id].raised)} of {ghs(standing[house.id].target)}</b></div>}
       </div>
       <p className="small muted" style={{ margin: 0 }}>Captain: {house.captains.join(', ') || 'not appointed yet'} · {house.with_accounts} of {house.members} can sign in</p>
-      <Roster key={house.id + rosterKey} houseId={house.id} admin={admin} />
+      <Roster key={house.id + rosterKey} houseId={house.id} admin={admin} onInvite={setInvite} />
     </div>}
 
     <div className="card stack"><div className="card-h"><h2>Raised by house</h2><span className="muted small">Verified contributions from classmates, all time</span></div>
@@ -115,11 +117,12 @@ export default function Houses() {
       <button className="btn primary" onClick={() => act(() => api.post('/captain/remind'), 'Reminder queued by in-app message and SMS.')}>Send a friendly reminder</button>
       <div className="tablewrap" style={{ maxHeight: 280, overflowY: 'auto', marginTop: 10 }}><table><thead><tr><th>Member</th><th>No.</th><th>City</th></tr></thead><tbody>{out.data.notYet.map((m: any) => <tr key={m.member_no}><td>{m.full_name}</td><td className="mono">{m.member_no}</td><td>{m.city}</td></tr>)}</tbody></table></div></div>}
     {dialog}
+    {invite && <InviteSheet invite={invite} onClose={() => setInvite(null)} />}
   </div>;
 }
 
 /** Classmates in one house with what each has given, 50 at a time. */
-function Roster({ houseId, admin }: { houseId: string; admin: boolean }) {
+function Roster({ houseId, admin, onInvite }: { houseId: string; admin: boolean; onInvite: (i: Invite) => void }) {
   const [qs, setQs] = useState(''), [sort, setSort] = useState('name'), [rows, setRows] = useState<any[]>([]), [total, setTotal] = useState(0), [page, setPage] = useState(0), [shown, setShown] = useState(false), [err, setErr] = useState('');
   useEffect(() => {
     let stop = false;
@@ -137,10 +140,10 @@ function Roster({ houseId, admin }: { houseId: string; admin: boolean }) {
         <input aria-label="Search this house" placeholder="Search name, city, profession" value={qs} onChange={(e) => { setQs(e.target.value); setPage(0); }} style={{ maxWidth: 260 }} /></div></div>
     {!shown && <p className="def" style={{ margin: 0 }}>Individual amounts are visible to the finance team only. You can see who has given, and your own amount.</p>}
     {rows.length === 0 ? <p className="small muted" style={{ margin: 0 }}>{qs ? 'No one matches.' : 'No one in this house yet.'}</p> :
-      <div className="tablewrap"><table><thead><tr><th>Name</th><th className="hide-sm">No.</th><th className="hide-sm">City</th><th className="hide-sm">Profession</th><th>Given</th><th className="r">Amount</th><th className="hide-sm">Last paid</th>{admin && <th className="hide-sm">Confirmed</th>}</tr></thead>
+      <div className="tablewrap"><table><thead><tr><th>Name</th><th className="hide-sm">No.</th><th className="hide-sm">City</th><th className="hide-sm">Profession</th><th>Given</th><th className="r">Amount</th><th className="hide-sm">Last paid</th>{admin && <th>Sign-in</th>}</tr></thead>
         <tbody>{rows.map((m) => <tr key={m.member_no}><td>{m.full_name}<div className="show-sm def">{[m.member_no, m.city].filter(Boolean).join(' · ')}</div></td><td className="mono hide-sm">{m.member_no}</td><td className="hide-sm">{m.city ?? ''}</td><td className="hide-sm">{m.profession ?? ''}</td>
           <td>{m.contributed ? <span className="pill ok">Yes{m.payments > 1 ? ` · ${m.payments}×` : ''}</span> : <span className="muted">Not yet</span>}</td>
-          <td className="r num">{m.given != null ? ghs(m.given) : m.contributed ? '•••' : '—'}</td><td className="hide-sm">{m.last_paid ? date(m.last_paid) : ''}</td>{admin && <td className="hide-sm">{m.verified ? 'Yes' : '—'}</td>}</tr>)}</tbody></table></div>}
+          <td className="r num">{m.given != null ? ghs(m.given) : m.contributed ? '•••' : '—'}</td><td className="hide-sm">{m.last_paid ? date(m.last_paid) : ''}</td>{admin && <td>{m.has_account ? <button className="btn sm" onClick={async () => { try { const r = await api.post<any>(`/admin/members/${m.member_no}/invite`); onInvite({ name: m.full_name, link: r.link, delivery: r.delivery }); } catch (e) { setErr((e as Error).message); } }}>Invite link</button> : <span className="muted small">No email</span>}</td>}</tr>)}</tbody></table></div>}
     {rows.length < total && <button className="btn sm" onClick={() => setPage(page + 1)}>Show more ({total - rows.length})</button>}
   </div>;
 }

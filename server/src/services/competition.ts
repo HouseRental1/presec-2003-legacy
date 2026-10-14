@@ -125,7 +125,7 @@ export async function houseMembers(db: Db | any, actor: Actor, houseId: string, 
   const show = await seesAmounts(db, actor);
   const order = sort === 'amount' && show ? 'given DESC, m.full_name' : sort === 'recent' ? 'last_paid DESC NULLS LAST, m.full_name' : 'm.full_name';
   const where = `hm.house_id=$1 AND hm.valid_to IS NULL AND ($2 = '' OR (m.full_name || ' ' || m.member_no || ' ' || coalesce(m.city,'') || ' ' || coalesce(m.profession,'')) ILIKE '%' || $2 || '%')`;
-  const rows = await q<any>(db, `SELECT m.id, m.member_no, m.full_name, m.city, m.profession, m.verified_at IS NOT NULL verified,
+  const rows = await q<any>(db, `SELECT m.id, m.member_no, m.full_name, m.city, m.profession, m.verified_at IS NOT NULL verified, m.user_id IS NOT NULL has_account,
       coalesce(sum(p.amount_ghs), 0)::bigint given, count(p.id)::int payments, max(p.paid_on) last_paid
     FROM members m JOIN house_memberships hm ON hm.member_id=m.id
     LEFT JOIN payments p ON p.member_id=m.id AND p.status='verified' AND p.category='member'
@@ -133,7 +133,7 @@ export async function houseMembers(db: Db | any, actor: Actor, houseId: string, 
   const [{ n }] = await q<any>(db, `SELECT count(*)::int n FROM members m JOIN house_memberships hm ON hm.member_id=m.id WHERE ${where}`, [houseId, search]);
   return {
     total: n, amountsShown: show,
-    rows: rows.map((r: any) => ({ member_no: r.member_no, full_name: r.full_name, city: r.city, profession: r.profession, verified: r.verified,
+    rows: rows.map((r: any) => ({ member_no: r.member_no, full_name: r.full_name, city: r.city, profession: r.profession, verified: r.verified, has_account: r.has_account,
       contributed: r.payments > 0, payments: r.payments, last_paid: r.last_paid,
       given: show || r.id === actor.memberId ? Number(r.given) : null })),
   };

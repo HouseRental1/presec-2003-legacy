@@ -43,7 +43,7 @@ export async function addClassmate(db: Db, actor: Actor, input: z.infer<typeof A
   }
   const r = await importMembers(db, actor, { rows: [{ memberNo: input.memberNo || undefined, fullName: input.fullName, houseId: input.houseId, email: input.email, phone: input.phone, city: input.city, profession: input.profession }], sendInvites: input.sendInvite });
   if (r.skipped.length) throw conflict(`Not added: ${r.skipped[0].reason}.`);
-  return { memberNo: r.memberNos[0], invited: !!input.email && input.sendInvite };
+  return { memberNo: r.memberNos[0], invited: !!input.email && input.sendInvite, link: r.invites[0]?.link ?? null, delivery: inviteDelivery() };
 }
 
 /* ───────── bulk import of the year-group register, with invitations */
@@ -54,7 +54,7 @@ export const ImportMembersInput = z.object({ rows: z.array(z.object({
 export async function importMembers(db: Db, actor: Actor, input: z.infer<typeof ImportMembersInput>) {
   need(actor, 'admin.members', 'import members');
   const houses = new Set((await q<any>(db, 'SELECT id FROM houses')).map((h) => h.id));
-  const created: string[] = [], skipped: { memberNo: string; reason: string }[] = [];
+  const created: string[] = [], skipped: { memberNo: string; reason: string }[] = [], invites: { memberNo: string; name: string; link: string }[] = [];
   for (const r of input.rows) {
     if (!r.memberNo) r.memberNo = await nextMemberNo(db);
     if (!houses.has(r.houseId)) { skipped.push({ memberNo: r.memberNo!, reason: 'unknown house ' + r.houseId }); continue; }
@@ -73,11 +73,12 @@ export async function importMembers(db: Db, actor: Actor, input: z.infer<typeof 
     if (userId && input.sendInvites) {
       const link = await issueToken(db, userId, 'invite', 24 * 14);
       await notify(db, 'member:' + m.id, ['email', 'sms'], `Ɔdadeɛ 2003: you are invited to the Class of 2003 Legacy platform. Set your password here (link valid 14 days): ${link}`, 'security');
+      invites.push({ memberNo: r.memberNo!, name: r.fullName, link });   // shown to the administrator so it can also be shared directly (e.g. WhatsApp)
     }
     created.push(r.memberNo!);
   }
   await audit(db, actor, 'Imported members', `${created.length} members`, `${skipped.length} skipped`);
-  return { created: created.length, skipped, memberNos: created };
+  return { created: created.length, skipped, memberNos: created, invites, delivery: inviteDelivery() };
 }
 export async function resendInvite(db: Db, actor: Actor, memberNo: string) {
   need(actor, 'admin.members', 'send invitations');
@@ -86,7 +87,10 @@ export async function resendInvite(db: Db, actor: Actor, memberNo: string) {
   const link = await issueToken(db, m.user_id, 'invite', 24 * 14);
   await notify(db, 'member:' + m.id, ['email', 'sms'], `Ɔdadeɛ 2003: set your Class of 2003 Legacy password here (valid 14 days): ${link}`, 'security');
   await audit(db, actor, 'Sent invitation', memberNo);
+  return { link, delivery: inviteDelivery() };
 }
+/** Whether invitations actually leave the platform by email/SMS, or must be shared by hand. */
+export const inviteDelivery = () => ({ email: config.emailProvider !== 'log', sms: config.smsProvider !== 'log' });
 
 /* ───────── password reset (never reveals whether an email exists) */
 export async function forgotPassword(db: Db, email: string) {

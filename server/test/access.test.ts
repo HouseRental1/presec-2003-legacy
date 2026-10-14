@@ -49,3 +49,18 @@ describe('two access levels', () => {
     expect((await post('/api/admin/access', { who: 'admin@example.org', access: 'member' }, A)).statusCode).toBe(403);   // not yourself
   });
 });
+
+describe('invitation links for administrators', () => {
+  it('adding a classmate returns a working set-password link', async () => {
+    const r = await post('/api/houses/members', { fullName: 'Ama Test Member', houseId: 'H4', email: 'ama.test@example.org' }, A);
+    expect(r.statusCode, r.body).toBe(200);
+    const { link, delivery } = r.json(); expect(delivery).toEqual({ email: false, sms: false });
+    const token = new URL(link).searchParams.get('token');
+    expect((await app.inject({ method: 'POST', url: '/api/auth/set-password', payload: { token, password: 'member-password-1' } })).statusCode).toBe(200);
+    const s = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'ama.test@example.org', password: 'member-password-1' } });
+    expect(s.statusCode).toBe(200);
+    expect((await get('/api/me', { authorization: 'Bearer ' + s.json().token })).json().access).toBe('member');
+    const again = await post(`/api/admin/members/${r.json().memberNo}/invite`, {}, A);
+    expect(again.json().link).toMatch(/set-password\?token=/);
+  });
+});

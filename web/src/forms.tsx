@@ -62,3 +62,23 @@ export async function downloadCsv(name: string) {
   const url = URL.createObjectURL(await res.blob());
   const a = document.createElement('a'); a.href = url; a.download = `${name}-${new Date().toISOString().slice(0, 10)}.csv`; a.click(); URL.revokeObjectURL(url);
 }
+
+export type Invite = { name: string; link: string; delivery?: { email: boolean; sms: boolean } };
+/** Shows a classmate's invitation link so an administrator can copy it or share it on WhatsApp. */
+export function InviteSheet({ invite, onClose }: { invite: Invite; onClose: () => void }) {
+  const [copied, setCopied] = useState(false);
+  const sent = invite.delivery?.email || invite.delivery?.sms;
+  const msg = `Hello ${invite.name.split(' ')[0]}, you are invited to the PRESEC Ɔdadeɛ 2003 Legacy platform. Set your password here (valid 14 days): ${invite.link}`;
+  const copy = async () => { try { await navigator.clipboard.writeText(invite.link); setCopied(true); } catch { (document.getElementById('invlink') as HTMLInputElement | null)?.select(); } };
+  return <div className="sheet-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="sheet stack" role="dialog" aria-modal="true" aria-label="Invitation link">
+      <div className="row between"><h2>Invitation for {invite.name}</h2><button type="button" className="btn sm" onClick={onClose}>Close</button></div>
+      <p className="small">{sent ? 'It has also been sent by ' + [invite.delivery?.email && 'email', invite.delivery?.sms && 'SMS'].filter(Boolean).join(' and ') + '.' : 'Email and SMS are not connected yet, so nothing was sent. Share this link with them yourself.'} They open it, choose a password, then sign in with their email. The link works once and expires in 14 days.</p>
+      <input id="invlink" readOnly value={invite.link} onFocus={(e) => e.target.select()} className="mono" />
+      <div className="row" style={{ flexWrap: 'wrap' }}>
+        <button className="btn primary" onClick={copy}>{copied ? 'Copied' : 'Copy link'}</button>
+        <a className="btn" href={`https://wa.me/?text=${encodeURIComponent(msg)}`} target="_blank" rel="noreferrer">Share on WhatsApp</a>
+      </div>
+      <p className="def">Keep this link private: whoever opens it first can set the password for this account.</p>
+    </div></div>;
+}
