@@ -148,3 +148,25 @@ table.clickable tbody tr{cursor:pointer} table.clickable tbody tr:hover{backgrou
 .timeline{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--line)}
 .timeline li{position:relative;padding:0 0 12px 12px} .timeline li::before{content:"";position:absolute;left:-20px;top:5px;width:10px;height:10px;border-radius:50%;background:var(--surface);border:2px solid var(--brand)}
 .timeline .t{display:block;font-size:.78rem;color:var(--muted)}
+/* Home and public hero: figures on one side, the six classrooms on the other */
+.home-hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);gap:24px;align-items:center}
+.blockprog{margin:0;color:#fff} .blockprog svg{width:100%;display:block;color:rgb(255 255 255 / .9)} .blockprog figcaption{font-size:.86rem;opacity:.9;margin-top:6px;text-align:center}
+.public-hero{background-color:var(--brand);background-image:linear-gradient(rgb(255 255 255 / .07) 1px,transparent 1px),linear-gradient(90deg,rgb(255 255 255 / .07) 1px,transparent 1px);background-size:22px 22px;color:#fff}
+.public-hero .bar{background:rgb(255 255 255 / .18)} .public-hero .bar>i{background:var(--gold-mark)}
+.public-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:28px;align-items:center}
+.public-title{color:#fff;font-size:clamp(1.7rem,4.5vw,2.6rem);font-stretch:112%;line-height:1.05}
+@media (max-width:760px){.home-hero,.public-grid{grid-template-columns:1fr}}
+.my-part{border-top:4px solid var(--gold-mark)}
+/* Admin to-do */
+.todo{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr))}
+a.chip{text-decoration:none;color:inherit}
+.steps{margin:0;padding-left:20px;display:grid;gap:4px;font-size:.92rem} .steps li.done{color:var(--muted)} .steps li.done::marker{color:var(--ok)}
+/* Notification counts, bell, phone "More" menu */
+.count{display:inline-grid;place-items:center;min-width:18px;height:18px;padding:0 5px;margin-left:6px;border-radius:999px;background:var(--gold-mark);color:#13213D;font-size:.7rem;font-weight:800;line-height:1}
+.bell{position:relative;display:inline-grid;place-items:center;width:36px;height:36px;border-radius:50%;color:var(--ink);border:1px solid var(--line);background:var(--surface)}
+.bell .count{position:absolute;top:-4px;right:-6px;margin:0}
+.tabbar button{all:unset;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:.7rem;font-weight:600;color:var(--muted);padding:6px 0} .tabbar button.active{color:var(--brand)}
+.more-sheet{position:fixed;inset:0;z-index:25;background:rgb(10 20 40 / .35);display:flex;align-items:flex-end}
+.more-sheet nav{width:100%;background:var(--surface);border-radius:16px 16px 0 0;padding:10px 10px calc(70px + env(safe-area-inset-bottom));display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.more-sheet a,.more-sheet button{all:unset;cursor:pointer;padding:12px;border-radius:10px;font-weight:600;color:var(--ink)} .more-sheet a.active{background:var(--surface-2)} .more-sheet button{color:var(--bad)}
+@media (max-width:860px){.topbar .signout{display:none}}

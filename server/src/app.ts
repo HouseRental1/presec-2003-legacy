@@ -100,7 +100,9 @@ export async function buildApp() {
   app.get('/api/me', read(async (a) => {
     const member = a.memberId ? await one(pool, `SELECT m.member_no, m.full_name, m.show_on_wall, hm.house_id FROM members m JOIN house_memberships hm ON hm.member_id=m.id AND hm.valid_to IS NULL WHERE m.id=$1`, [a.memberId]) : null;
     const [part] = await q<any>(pool, `SELECT value FROM settings WHERE key='member_participation'`);
-    return { ...a, perms: [...perms(a)], member, mfaRequired: config.requireMfa, access: accessOf(a.roles), memberParticipation: part?.value === true };
+    const seen = (await q<any>(pool, 'SELECT notifications_seen_at FROM users WHERE id=$1', [a.userId]))[0]?.notifications_seen_at;
+    const unread = Number((await q<any>(pool, `SELECT count(*)::int n FROM notifications WHERE audience = ANY($1) AND ($2::timestamptz IS NULL OR created_at > $2)`, [await audiences(a), seen ?? null]))[0].n);
+    return { ...a, perms: [...perms(a)], member, unread: Math.min(unread, 99), mfaRequired: config.requireMfa, access: accessOf(a.roles), memberParticipation: part?.value === true };
   }));
 
   /* public page — only approved figures, no individual amounts */
@@ -220,10 +222,35 @@ export async function buildApp() {
   app.post('/api/members/:id/house', write(M.HouseFix, (db, a, b, r) => M.correctHouse(db, a, id(r), b)));
 
   /* notifications & audit */
-  app.get('/api/notifications', read(async (a) => {
+  const audiences = async (a: Actor) => {
     const house = a.memberId ? (await q<any>(pool, 'SELECT house_id FROM house_memberships WHERE member_id=$1 AND valid_to IS NULL', [a.memberId]))[0]?.house_id : null;
-    return q(pool, `SELECT * FROM notifications WHERE audience = ANY($1) ORDER BY created_at DESC LIMIT 50`,
-      [[...(a.memberId ? ['all', 'member:' + a.memberId] : []), ...(house ? ['house:' + house] : []), ...[...perms(a)].map((p) => 'perm:' + p)]]);
+    return [...(a.memberId ? ['all', 'member:' + a.memberId] : []), ...(house ? ['house:' + house] : []), ...[...perms(a)].map((p) => 'perm:' + p)];
+  };
+  app.get('/api/notifications', read(async (a) => q(pool, `SELECT * FROM notifications WHERE audience = ANY($1) ORDER BY created_at DESC LIMIT 50`, [await audiences(a)])));
+  app.post('/api/notifications/seen', write(null, async (db, a) => { await db.query('UPDATE users SET notifications_seen_at=now() WHERE id=$1', [a.userId]); }));
+  /** What is waiting for this administrator, plus a getting-started checklist for a new platform. */
+  app.get('/api/todo', read(async (a) => {
+    need(a, 'admin.members', 'see the admin to-do list');
+    const p = perms(a);
+    const one1 = async (sql: string, args: unknown[] = []) => Number((await q<any>(pool, sql, args))[0]?.n ?? 0);
+    return {
+      signups: await one1(`SELECT count(*)::int n FROM signup_requests WHERE status='pending'`),
+      toVerify: p.has('fin.verify') ? await one1(`SELECT count(*)::int n FROM payments WHERE status='pending' AND source<>'gateway' AND recorded_by IS DISTINCT FROM $1`, [a.userId]) : 0,
+      exceptions: p.has('fin.view') ? await one1(`SELECT count(*)::int n FROM payments WHERE status='exception'`) : 0,
+      reversals: p.has('fin.verify') ? await one1(`SELECT count(*)::int n FROM payments WHERE status='reversal_requested' AND reversal_requested_by IS DISTINCT FROM $1`, [a.userId]) : 0,
+      toApprove: p.has('req.approve') ? await one1(`SELECT count(*)::int n FROM payment_requests r WHERE r.status='awaiting' AND r.requested_by<>$1 AND NOT EXISTS (SELECT 1 FROM request_decisions d WHERE d.request_id=r.id AND d.user_id=$1)`, [a.userId]) : 0,
+      toRelease: p.has('fin.release') ? await one1(`SELECT count(*)::int n FROM payment_requests WHERE status='approved'`) : 0,
+      setup: {
+        onRegister: !!a.memberId,
+        classmates: await one1(`SELECT count(*)::int n FROM house_memberships WHERE valid_to IS NULL`),
+        projectDescribed: !!(await q<any>(pool, `SELECT description FROM projects LIMIT 1`))[0]?.description,
+        houseProfiles: await one1(`SELECT count(*)::int n FROM houses WHERE about IS NOT NULL OR motto IS NOT NULL`),
+        superAdmins: await one1(`SELECT count(DISTINCT user_id)::int n FROM user_roles WHERE role='superadmin'`),
+        competition: (await one1(`SELECT count(*)::int n FROM competition_rules WHERE status='in_force'`)) > 0,
+        paystack: config.paymentProvider === 'paystack',
+        mfaOn: config.requireMfa,
+      },
+    };
   }));
   app.get('/api/audit', read(async (a) => { need(a, 'audit.view', 'view the audit trail'); return q(pool, 'SELECT seq, at, actor_label, action, target, detail, hash FROM audit_events ORDER BY seq DESC LIMIT 200'); }));
   app.get('/api/audit/verify', read(async (a) => { need(a, 'audit.view', 'check the audit trail'); return verifyAuditChain(pool); }));

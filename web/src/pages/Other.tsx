@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { api, date } from '../api';
 import { Gate, Pill, useLoad, useSession, useToast } from '../ui';
 import { useDialog, uploadFile } from '../forms';
@@ -15,7 +16,8 @@ export function Audit() {
 
 export function Notifications() {
   const n = useLoad<any[]>('/notifications');
-  const { me } = useSession();
+  const { me, reload } = useSession();
+  useEffect(() => { if (me?.unread) api.post('/notifications/seen').then(reload).catch(() => {}); }, []); // eslint-disable-line
   const staff = me!.roles.some((r) => r !== 'member');
   return <div className="stack"><div><div className="eyebrow">In-app · SMS · email</div><h1>Notifications</h1></div>
     {me!.mfaRequired && staff && !me!.mfaPassed && <div className="callout warn">Staff actions need two-factor sign-in. Set it up on <a href="/profile">your profile</a>.</div>}

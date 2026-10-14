@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { api, ghs, HOUSE_NAME, houseIdFrom, today } from '../api';
 import { useDialog, downloadCsv } from '../forms';
+import { AdminTodo } from './Todo';
 import { Gate, PersonLink, Pill, useAction, useLoad, useSession, useToast } from '../ui';
 
 const HOUSE_OPTS = Object.entries(HOUSE_NAME) as [string, string][];
@@ -16,6 +17,7 @@ export default function Admin() {
   const current = tab || (pending ? 'signups' : tabs.find((t) => t[0] !== 'signups')?.[0] ?? '');
   if (!tabs.length) return <div className="callout warn">Administration is for the committee, the administrator and finance roles.</div>;
   return <div className="stack"><div><div className="eyebrow">Run by the committee for the year group</div><h1>Administration</h1></div>
+    <AdminTodo />
     <div className="tabs" role="tablist">{tabs.map(([k, l]) => <button key={k} role="tab" aria-selected={current === k} onClick={() => setTab(k)}>{l}</button>)}</div>
     {current === 'signups' && <Signups onChange={su.reload} />}{current === 'register' && <Register />}{current === 'staff' && <Staff />}{current === 'controls' && <Controls />}{current === 'ballots' && <Ballots />}{current === 'project' && <ProjectSetup />}{current === 'exports' && <Exports />}</div>;
 }

@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { api, ApiError, HOUSE_COLOR, HOUSE_NAME } from './api';
 
-export interface Me { userId: string; name: string; roles: string[]; perms: string[]; memberId: string | null; mfaPassed: boolean; mfaRequired: boolean; access: 'superadmin' | 'admin' | 'member'; memberParticipation: boolean; member: { member_no: string; house_id: string; show_on_wall: boolean } | null }
+export interface Me { userId: string; name: string; roles: string[]; perms: string[]; memberId: string | null; mfaPassed: boolean; mfaRequired: boolean; access: 'superadmin' | 'admin' | 'member'; unread: number; memberParticipation: boolean; member: { member_no: string; house_id: string; show_on_wall: boolean } | null }
 
 /* session */
 const SessionCtx = createContext<{ me: Me | null; reload: () => Promise<void>; can: (p: string) => boolean; signOut: () => Promise<void> }>(null as any);

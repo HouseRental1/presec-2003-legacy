@@ -30,8 +30,8 @@ const MEMBER_NAV: [string, string, string?][] = [
   ['/', 'Home'], ['/money', 'My giving'], ['/pledges', 'Pledges'], ['/houses', 'Houses'], ['/project', 'Project progress'], ['/votes', 'Votes', 'vote'],
   ['/members', 'Year group'], ['/community', 'News & events'], ['/legacy', 'Legacy archive'], ['/notifications', 'Notifications'], ['/give', 'Public page'],
 ];
-const ADMIN_TABS = [['/admin', 'Admin'], ['/', 'Home'], ['/money', 'Money'], ['/houses', 'Houses'], ['/project', 'Project']];
-const MEMBER_TABS = [['/', 'Home'], ['/money', 'Give'], ['/pledges', 'Pledges'], ['/houses', 'Houses'], ['/project', 'Project']];
+const ADMIN_TABS = [['/admin', 'Admin'], ['/', 'Home'], ['/money', 'Money'], ['/houses', 'Houses']];
+const MEMBER_TABS = [['/', 'Home'], ['/money', 'Give'], ['/pledges', 'Pledges'], ['/houses', 'Houses']];
 
 function FirstAdmin({ onDone, recover = false, onCancel }: { onDone: () => void; recover?: boolean; onCancel?: () => void }) {
   const [f, setF] = useState({ name: '', email: '', password: '', password2: '', code: '' });
@@ -136,6 +136,7 @@ function Login() {
 }
 
 function Shell() {
+  const [more, setMore] = useState(false);
   const { me, can, signOut } = useSession();
   const loc = useLocation();
   if (loc.pathname === '/give') return <Give />;
@@ -149,12 +150,12 @@ function Shell() {
   return <div className="app">
     <aside className="rail" aria-label="Main navigation">
       <div className="brandmark"><Crest size={46} /><div><b>Class of 2003 Legacy</b><span>PRESEC Legon, Ɔdadeɛ 2003</span></div></div>
-      <nav className="nav">{items.map(([to, label]) => <NavLink key={to} to={to} end={to === '/'}>{label}</NavLink>)}</nav>
+      <nav className="nav">{items.map(([to, label]) => <NavLink key={to} to={to} end={to === '/'}>{label}{to === '/notifications' && me.unread > 0 && <span className="count" aria-label={`${me.unread} new`}>{me.unread}</span>}</NavLink>)}</nav>
     </aside>
     <main className="main">
       <div className="topbar">
         <Link to="/profile" style={{ color: 'inherit', textDecoration: 'none' }}><b>{me.name}</b> <span className={'pill ' + (isAdmin ? 'ok' : '')} style={{ marginLeft: 6 }}>{me.access === 'superadmin' ? 'Super admin' : isAdmin ? 'Admin' : 'Member'}</span> <span className="muted small">{''}{me.member ? ' · ' + me.member.member_no : ''}</span></Link>
-        <div className="row">{me.mfaRequired && !me.mfaPassed && me.roles.some((r) => r !== 'member') && <Link className="pill warn" to="/profile">Set up two-factor sign-in</Link>}<button className="btn sm" onClick={signOut}>Sign out</button></div>
+        <div className="row"><Link to="/notifications" className="bell" aria-label={me.unread ? `${me.unread} new notifications` : 'Notifications'}><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 3a6 6 0 0 0-6 6v3.6L4.5 15.5h15L18 12.6V9a6 6 0 0 0-6-6Zm-2 14.5a2 2 0 0 0 4 0" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" /></svg>{me.unread > 0 && <span className="count">{me.unread}</span>}</Link>{me.mfaRequired && !me.mfaPassed && me.roles.some((r) => r !== 'member') && <Link className="pill warn" to="/profile">Set up two-factor sign-in</Link>}<button className="btn sm signout" onClick={signOut}>Sign out</button></div>
       </div>
       <Routes>
         <Route path="/" element={<Home />} /><Route path="/money" element={<Money />} /><Route path="/houses" element={<Houses />} /><Route path="/pledges" element={<Pledges />} /><Route path="/people/:no" element={<Person />} />
@@ -164,7 +165,11 @@ function Shell() {
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </main>
-    <nav className="tabbar" aria-label="Main navigation">{(isAdmin ? ADMIN_TABS : MEMBER_TABS).map(([to, l]) => <NavLink key={to} to={to} end={to === '/'}>{l}</NavLink>)}</nav>
+    <nav className="tabbar" aria-label="Main navigation">{(isAdmin ? ADMIN_TABS : MEMBER_TABS).map(([to, l]) => <NavLink key={to} to={to} end={to === '/'} onClick={() => setMore(false)}>{l}</NavLink>)}
+      <button className={more ? 'active' : ''} aria-expanded={more} onClick={() => setMore(!more)}>More{me.unread > 0 && <span className="count">{me.unread}</span>}</button></nav>
+    {more && <div className="more-sheet" onClick={(e) => e.target === e.currentTarget && setMore(false)}><nav aria-label="All pages">
+      {[...items, ['/profile', 'My profile'] as [string, string]].filter(([to]) => !(isAdmin ? ADMIN_TABS : MEMBER_TABS).some(([t]) => t === to)).map(([to, label]) => <NavLink key={to} to={to} end={to === '/'} onClick={() => setMore(false)}>{label}{to === '/notifications' && me.unread > 0 && <span className="count">{me.unread}</span>}</NavLink>)}
+      <button onClick={signOut}>Sign out</button></nav></div>}
   </div>;
 }
 

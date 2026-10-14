@@ -201,3 +201,15 @@ describe('payment history, corrections and attention counts', () => {
     expect((await post(`/api/finance/payments/${v.id}/edit`, { amountGhs: 1, ref: 'XXX', paidOn: today, reason: 'try' }, A)).statusCode).toBe(409);
   });
 });
+
+describe('admin to-do and unread notifications', () => {
+  it('counts waiting work for admins only, and clears unread when opened', async () => {
+    const t = (await get('/api/todo', A)).json();
+    expect(t).toMatchObject({ signups: expect.any(Number), toVerify: expect.any(Number), setup: { onRegister: expect.any(Boolean), superAdmins: 1 } });
+    const mt = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'ama.test@example.org', password: 'member-password-1' } })).json().token;
+    expect((await get('/api/todo', { authorization: 'Bearer ' + mt })).statusCode).toBe(403);
+    expect((await get('/api/me', A)).json().unread).toBeGreaterThan(0);
+    expect((await post('/api/notifications/seen', {}, A)).statusCode).toBe(200);
+    expect((await get('/api/me', A)).json().unread).toBe(0);
+  });
+});

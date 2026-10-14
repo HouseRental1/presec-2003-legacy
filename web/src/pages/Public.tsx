@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api, ghs, pct } from '../api';
-import { AuthShell, Bar, useLoad } from '../ui';
+import { AuthShell, Bar, Crest, useLoad } from '../ui';
+import { BlockProgress } from './Home';
 
 /** Public page: approved figures only, no individual amounts. Friends of the school can give here. */
 export function Give() {
@@ -16,11 +17,14 @@ export function Give() {
     } catch (x) { setErr((x as Error).message); } finally { setBusy(false); }
   };
   return <div>
-    <div className="public-hero"><div className="inner stack">
-      <div className="eyebrow" style={{ color: 'inherit', opacity: .8 }}>PRESEC Legon · Ɔdadeɛ 2003 year group</div>
-      <h1 style={{ fontSize: 'clamp(1.8rem,5vw,2.6rem)' }}>A six-unit classroom block for PRESEC, from the Class of 2003</h1>
-      {p.data && <><div className="bigfig">{ghs(p.data.raised)}</div><Bar v={p.data.raised / Math.max(1, p.data.budget)} />
-        <p>{p.data.budget > 0 ? `${pct(p.data.raised / p.data.budget)} of the ${ghs(p.data.budget)} budget raised · building ${p.data.acceptedProgress.toFixed(0)}% complete (inspected and signed off)` : 'Raised so far. The budget will be published once it is approved by the year group.'}</p></>}
+    <div className="public-hero"><div className="inner public-grid">
+      <div className="stack" style={{ gap: 12 }}>
+        <div className="row" style={{ gap: 12 }}><Crest size={56} /><span className="small" style={{ opacity: .85 }}>PRESEC Legon<br />Ɔdadeɛ 2003 year group</span></div>
+        <h1 className="public-title">A six-unit classroom block for PRESEC, from the Class of 2003</h1>
+        {p.data && <><div className="bigfig">{ghs(p.data.raised)}</div><Bar v={p.data.raised / Math.max(1, p.data.budget)} />
+          <p>{p.data.budget > 0 ? `${pct(p.data.raised / p.data.budget)} of the ${ghs(p.data.budget)} budget raised · building ${p.data.acceptedProgress.toFixed(0)}% complete (inspected and signed off)` : 'Raised so far. The budget will be published once it is approved by the year group.'}</p></>}
+      </div>
+      {p.data && <BlockProgress raised={p.data.raised} budget={p.data.budget} />}
     </div></div>
     <div className="public-body stack">
       {p.data?.phases?.length > 0 && <div className="card stack"><h2>Where the project is</h2>
