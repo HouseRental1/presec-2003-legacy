@@ -1,23 +1,23 @@
 import { useState } from 'react';
-import { api, ghs, date, today } from '../api';
+import { Link } from 'react-router-dom';
+import { api, ghs, date, today, HOUSE_NAME } from '../api';
 import { Gate, Pill, STATUS, Tile, useAction, useLoad, useSession, useToast } from '../ui';
 import { useDialog, uploadFile, MemberPicker } from '../forms';
 
 export default function Money() {
   const { can } = useSession();
-  const tabs = ([['mine', 'My contributions', can('own')], ['verify', 'Verification', can('fin.view')], ['payout', 'Payments out', can('fin.view') || can('req.create') || can('req.approve')], ['ledger', 'Ledger & reports', can('fin.view')]] as const).filter((t) => t[2]);
+  const tabs = ([['overview', 'Overview', can('fin.view')], ['mine', can('fin.view') ? 'My payments' : 'Pay & statement', can('own')], ['verify', 'Verification', can('fin.view')], ['payout', 'Payments out', can('fin.view') || can('req.create') || can('req.approve')], ['ledger', 'Ledger & reports', can('fin.view')]] as const).filter((t) => t[2]);
   const [tab, setTab] = useState<string>(tabs[0]?.[0] ?? 'mine');
   if (!tabs.length) return <div className="callout warn">Money is available to members and finance roles.</div>;
-  return <div className="stack"><div><div className="eyebrow">Central ledger · one source of truth</div><h1>Money</h1></div>
-    <div className="tabs" role="tablist">{tabs.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}</div>
-    {tab === 'mine' && <Mine />}{tab === 'verify' && <Verify />}{tab === 'payout' && <Payout />}{tab === 'ledger' && <Ledger />}</div>;
+  return <div className="stack"><div><div className="eyebrow">Actual cash in and out · promises are on the Pledges page</div><h1>{can('fin.view') ? 'Money' : 'My giving'}</h1></div>
+    {tabs.length > 1 && <div className="tabs" role="tablist">{tabs.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}</div>}
+    {tab === 'overview' && <Overview />}{tab === 'mine' && <Mine />}{tab === 'verify' && <Verify />}{tab === 'payout' && <Payout />}{tab === 'ledger' && <Ledger />}</div>;
 }
 
 function Mine() {
   const st = useLoad<any>('/me/statement');
   const act = useAction();
   const [amount, setAmount] = useState('500'), [currency, setCurrency] = useState('GHS'), [channel, setChannel] = useState('momo'), [onBehalf, setOnBehalf] = useState('');
-  const [pledge, setPledge] = useState('2000'), [inst, setInst] = useState('5');
   const [ev, setEv] = useState({ amount: '', ref: '', paidOn: today(), note: '' });
   const [file, setFile] = useState<File | null>(null);
   if (!st.data) return <Gate error={st.error}><p className="muted">Loading…</p></Gate>;
@@ -30,7 +30,8 @@ function Mine() {
     if (r.checkout.provider === 'sandbox') await api.post(`/sandbox/complete/${r.paymentId}`);
   }, 'Payment sent. It is credited as soon as the provider confirms it.', st.reload);
   return <div className="stack">
-    <div className="grid"><Tile l="You have given" v={ghs(s.paid)} d="Verified payments credited to you." /><Tile l="Your pledge" v={ghs(s.pledged)} /><Tile l="Remaining on pledge" v={ghs(s.remaining)} /></div>
+    <div className="grid"><Tile l="You have given" v={ghs(s.paid)} d="Verified payments credited to you and your house." /><Tile l="Payments" v={String(s.payments.filter((p: any) => p.status === 'verified').length)} d="Confirmed payments on your statement." />
+      <Link to="/pledges" className="card stat" style={{ textDecoration: 'none', color: 'inherit' }}><div className="l">Your pledge</div><div className="v">{s.pledged ? ghs(s.pledged) : 'None yet'}</div><div className="def">{s.pledged ? `${ghs(s.remaining)} still to pay · ` : ''}Make or change it on Pledges →</div></Link></div>
     <div className="grid-2">
       <div className="card stack"><h2>Contribute</h2>
         <div className="fgrid">
@@ -50,10 +51,6 @@ function Mine() {
           <label className="f" htmlFor="ef">Slip or screenshot (optional)<input id="ef" type="file" accept="image/*,application/pdf" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></label>
         </div>
         <button className="btn" onClick={() => act(async () => { const fileId = file ? await uploadFile(file, 'payment_evidence') : undefined; await api.post('/payments/evidence', { amountGhs: Number(ev.amount), ref: ev.ref, paidOn: ev.paidOn, note: ev.note, fileId }); }, 'Evidence submitted. The treasury team will verify it.', st.reload)}>Submit evidence</button>
-        <h3 style={{ marginTop: 8 }}>Pledge</h3>
-        <div className="fgrid"><label className="f" htmlFor="pa">Total (GH₵)<input id="pa" type="number" value={pledge} onChange={(e) => setPledge(e.target.value)} /></label>
-          <label className="f" htmlFor="pi">Instalments<input id="pi" type="number" min="1" max="24" value={inst} onChange={(e) => setInst(e.target.value)} /></label></div>
-        <button className="btn" onClick={() => act(() => api.post('/pledges', { amountGhs: Number(pledge), instalments: Number(inst) }), 'Pledge saved.', st.reload)}>Save pledge</button>
       </div>
     </div>
     <div className="card"><div className="card-h"><h2>Statement</h2></div><div className="tablewrap"><table><thead><tr><th>Date</th><th>Reference</th><th>Channel</th><th>Status</th><th>Receipt</th><th className="r">Amount</th></tr></thead><tbody>
@@ -142,5 +139,32 @@ function Ledger() {
       <dt>Bank</dt><dd>{ghs(rep.data.closing.bank, 2)}</dd><dt>Provider clearing</dt><dd>{ghs(rep.data.closing.clearing, 2)}</dd><dt>Settlement differences</dt><dd>{ghs(rep.data.closing.suspense, 2)}</dd></dl></div>}
     <div className="card"><div className="card-h"><h2>Latest ledger lines</h2></div><div className="tablewrap"><table><thead><tr><th>Date</th><th>Kind</th><th>Account</th><th>Memo</th><th className="r">Debit</th><th className="r">Credit</th></tr></thead><tbody>
       {l.data.recent.map((e: any, i: number) => <tr key={i}><td>{date(e.effective_date)}</td><td>{e.kind}{e.reversal_of ? ' ↺' : ''}</td><td className="small">{e.account}</td><td className="small">{e.memo}</td><td className="r">{e.debit ? ghs(e.debit, 2) : ''}</td><td className="r">{e.credit ? ghs(e.credit, 2) : ''}</td></tr>)}</tbody></table></div></div>
+  </div>;
+}
+
+/** Admin overview: where the cash stands and the latest payments in. */
+function Overview() {
+  const d = useLoad<any>('/dashboard'), r = useLoad<any[]>('/finance/recent?limit=50');
+  const [q, setQ] = useState('');
+  if (!d.data) return <Gate error={d.error}><p className="muted">Loading…</p></Gate>;
+  const x = d.data;
+  const rows = (r.data ?? []).filter((p) => !q || `${p.full_name ?? ''} ${p.member_no ?? ''} ${p.payer_name ?? ''} ${p.external_ref}`.toLowerCase().includes(q.toLowerCase()));
+  return <div className="stack">
+    <div className="grid">
+      <Tile l="Cash received" v={ghs(x.cashReceived)} d="Verified contributions and donations." />
+      <Tile l="Spent on the project" v={ghs(x.spent)} d="Posted costs, including retention owed." />
+      <Tile l="Available now" v={ghs(x.availableNow)} d={x.definitions?.availableNow} />
+      <Tile l="Approved commitments" v={ghs(x.commitments)} d="Contract still to pay and approved payments not yet released." />
+    </div>
+    <div className="card"><div className="card-h"><h2>Latest payments in</h2><input aria-label="Search payments" placeholder="Search name, number or reference" value={q} onChange={(e) => setQ(e.target.value)} style={{ maxWidth: 260 }} /></div>
+      <Gate error={r.error}>{!rows.length ? <p className="muted small" style={{ margin: 0 }}>{q ? 'No payment matches.' : 'No payments yet.'}</p> :
+        <div className="tablewrap"><table><thead><tr><th>Date</th><th>From</th><th className="hide-sm">How</th><th>Status</th><th className="hide-sm">Checked by</th><th className="r">Amount</th></tr></thead><tbody>
+          {rows.map((p) => <tr key={p.id}><td>{date(p.paid_on)}</td>
+            <td>{p.full_name ?? p.payer_name ?? 'Unmatched'}<div className="def">{p.member_no ?? ''}{p.house_id ? ' · ' + HOUSE_NAME[p.house_id] : ''}{p.category === 'donor' ? ' · friend of the school' : ''}</div></td>
+            <td className="hide-sm">{p.source === 'gateway' ? 'Paystack' : p.source === 'self' ? 'Reported transfer' : 'Recorded'} · {p.network ?? p.channel}<div className="def mono">{p.external_ref}</div></td>
+            <td><Pill k={STATUS[p.status]?.[1] ?? ''}>{STATUS[p.status]?.[0] ?? p.status}</Pill></td>
+            <td className="hide-sm small">{p.source === 'gateway' ? 'Automatic' : p.verified_by_name ?? '—'}{p.recorded_by_name && <div className="def">recorded by {p.recorded_by_name}</div>}</td>
+            <td className="r num">{ghs(p.amount_ghs, 2)}</td></tr>)}</tbody></table></div>}</Gate>
+    </div>
   </div>;
 }

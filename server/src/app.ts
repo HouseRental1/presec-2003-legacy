@@ -142,6 +142,7 @@ export async function buildApp() {
   }
 
   /* finance desk */
+  app.get('/api/finance/recent', read((a, req) => P.recentPayments(pool, a, Number((req.query as any).limit ?? 50))));
   app.get('/api/finance/queues', read((a) => P.queues(pool, a)));
   app.post('/api/finance/payments', write(P.ManualInput, (db, a, b) => P.recordManual(db, a, b)));
   app.post('/api/finance/payments/:id/verify', write(null, (db, a, _b, r) => P.verify(db, a, id(r))));

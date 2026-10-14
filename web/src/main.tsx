@@ -26,11 +26,11 @@ const ADMIN_NAV: [string, string, string?][] = [
 ];
 /** Members: view-only, plus pledging and paying their own contributions. */
 const MEMBER_NAV: [string, string, string?][] = [
-  ['/', 'Home'], ['/money', 'My pledge & giving'], ['/pledges', 'Pledges'], ['/houses', 'Houses'], ['/project', 'Project progress'], ['/votes', 'Votes', 'vote'],
+  ['/', 'Home'], ['/money', 'My giving'], ['/pledges', 'Pledges'], ['/houses', 'Houses'], ['/project', 'Project progress'], ['/votes', 'Votes', 'vote'],
   ['/members', 'Year group'], ['/community', 'News & events'], ['/legacy', 'Legacy archive'], ['/notifications', 'Notifications'], ['/give', 'Public page'],
 ];
 const ADMIN_TABS = [['/admin', 'Admin'], ['/', 'Home'], ['/money', 'Money'], ['/houses', 'Houses'], ['/project', 'Project']];
-const MEMBER_TABS = [['/', 'Home'], ['/money', 'Give'], ['/houses', 'Houses'], ['/project', 'Project'], ['/members', 'Year group']];
+const MEMBER_TABS = [['/', 'Home'], ['/money', 'Give'], ['/pledges', 'Pledges'], ['/houses', 'Houses'], ['/project', 'Project']];
 
 function FirstAdmin({ onDone, recover = false, onCancel }: { onDone: () => void; recover?: boolean; onCancel?: () => void }) {
   const [f, setF] = useState({ name: '', email: '', password: '', password2: '', code: '' });

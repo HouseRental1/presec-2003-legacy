@@ -330,3 +330,14 @@ export async function queues(db: Db | any, actor: Actor) {
     clearing: await balance(db, 'CLEARING'),
   };
 }
+
+/** Money overview for admins: the latest payments in, whatever their status, newest first. */
+export async function recentPayments(db: Db | any, actor: Actor, limit = 50) {
+  need(actor, 'fin.view', 'view payments');
+  return q(db, `SELECT p.id, p.paid_on, p.created_at, p.amount_ghs, p.channel, p.network, p.source, p.status, p.category, p.external_ref, p.receipt_no, p.payer_name,
+      m.member_no, m.full_name, hm.house_id, rb.display_name recorded_by_name, vb.display_name verified_by_name
+    FROM payments p LEFT JOIN members m ON m.id=p.member_id
+    LEFT JOIN house_memberships hm ON hm.member_id=m.id AND hm.valid_to IS NULL
+    LEFT JOIN users rb ON rb.id=p.recorded_by LEFT JOIN users vb ON vb.id=p.verified_by
+    ORDER BY p.created_at DESC LIMIT $1`, [Math.min(200, Math.max(1, limit))]);
+}
