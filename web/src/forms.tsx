@@ -1,8 +1,8 @@
-import { ReactNode, useState } from 'react';
-import { api } from './api';
+import { ReactNode, useEffect, useRef, useState } from 'react';
+import { api, HOUSE_NAME } from './api';
 import { useToast } from './ui';
 
-export type Field = { name: string; label: string; type?: 'text' | 'number' | 'date' | 'datetime-local' | 'email' | 'password' | 'textarea' | 'select' | 'checkbox' | 'file'; options?: [string, string][]; value?: any; required?: boolean; hint?: string; accept?: string };
+export type Field = { name: string; label: string; type?: 'member' | 'text' | 'number' | 'date' | 'datetime-local' | 'email' | 'password' | 'textarea' | 'select' | 'checkbox' | 'file'; options?: [string, string][]; value?: any; required?: boolean; hint?: string; accept?: string; house?: string };
 
 /** A small dialog form. onSubmit receives typed values; the server's message is shown on failure. */
 export function FormDialog({ title, fields, submit, onSubmit, onClose, intro }: { title: string; fields: Field[]; submit: string; onSubmit: (v: Record<string, any>) => Promise<unknown>; onClose: () => void; intro?: ReactNode }) {
@@ -23,7 +23,8 @@ export function FormDialog({ title, fields, submit, onSubmit, onClose, intro }: 
         const id = 'f_' + f.name;
         const common = { id, required: f.required, value: f.type === 'file' || f.type === 'checkbox' ? undefined : v[f.name], onChange: (e: any) => setV({ ...v, [f.name]: f.type === 'checkbox' ? e.target.checked : f.type === 'file' ? e.target.files?.[0] : e.target.value }) };
         return <label key={f.name} className="f" htmlFor={id} style={f.type === 'textarea' ? { gridColumn: '1 / -1' } : undefined}>{f.label}
-          {f.type === 'textarea' ? <textarea rows={5} {...common} /> : f.type === 'select' ? <select {...common}>{f.options!.map(([val, l]) => <option key={val} value={val}>{l}</option>)}</select>
+          {f.type === 'member' ? <MemberPicker id={id} value={v[f.name]} house={f.house} required={f.required} onChange={(no) => setV((cur) => ({ ...cur, [f.name]: no }))} /> :
+           f.type === 'textarea' ? <textarea rows={5} {...common} /> : f.type === 'select' ? <select {...common}>{f.options!.map(([val, l]) => <option key={val} value={val}>{l}</option>)}</select>
             : f.type === 'checkbox' ? <input type="checkbox" id={id} checked={!!v[f.name]} onChange={common.onChange} style={{ width: 'auto' }} />
             : <input type={f.type ?? 'text'} step={f.type === 'number' ? 'any' : undefined} accept={f.accept} {...common} />}
           {f.hint && <span className="def">{f.hint}</span>}</label>;
@@ -81,4 +82,42 @@ export function InviteSheet({ invite, onClose }: { invite: Invite; onClose: () =
       </div>
       <p className="def">Keep this link private: whoever opens it first can set the password for this account.</p>
     </div></div>;
+}
+
+/** Searchable classmate picker: type part of a name, number, city or job and choose from the register. Value is the member number. */
+export function MemberPicker({ id, value, onChange, house = '', required, placeholder = 'Start typing a name or number' }: { id?: string; value: string; onChange: (memberNo: string, m?: any) => void; house?: string; required?: boolean; placeholder?: string }) {
+  const [text, setText] = useState(''), [open, setOpen] = useState(false), [rows, setRows] = useState<any[]>([]), [hi, setHi] = useState(0), [loading, setLoading] = useState(false);
+  const [picked, setPicked] = useState<any>(null);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (!value) { setPicked(null); } }, [value]);
+  useEffect(() => {
+    if (!open) return;
+    let stop = false; setLoading(true);
+    const t = setTimeout(() => api.get<any>(`/members?q=${encodeURIComponent(text.trim())}&house=${house}`).then((r) => { if (!stop) { setRows(r.rows); setHi(0); } }).catch(() => !stop && setRows([])).finally(() => !stop && setLoading(false)), 180);
+    return () => { stop = true; clearTimeout(t); };
+  }, [text, open, house]);
+  useEffect(() => {
+    const close = (e: MouseEvent) => { if (box.current && !box.current.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener('mousedown', close); return () => document.removeEventListener('mousedown', close);
+  }, []);
+  const choose = (m: any) => { setPicked(m); setText(''); setOpen(false); onChange(m.member_no, m); };
+  const listId = (id ?? 'mp') + '-list';
+  if (picked && value === picked.member_no) return <div className="picked">
+    <span><b>{picked.full_name}</b> <span className="mono small">{picked.member_no}</span> <span className="muted small">· {HOUSE_NAME[picked.house_id] ?? ''}{picked.city ? ' · ' + picked.city : ''}</span></span>
+    <button type="button" className="btn sm" onClick={() => { setPicked(null); onChange(''); setOpen(true); }}>Change</button></div>;
+  return <div className="picker" ref={box}>
+    <input id={id} role="combobox" aria-expanded={open} aria-controls={listId} aria-autocomplete="list" autoComplete="off" required={required && !value} placeholder={placeholder}
+      value={text} onFocus={() => setOpen(true)} onChange={(e) => { setText(e.target.value); setOpen(true); if (value) onChange(''); }}
+      onKeyDown={(e) => {
+        if (e.key === 'ArrowDown') { e.preventDefault(); setOpen(true); setHi((h) => Math.min(h + 1, rows.length - 1)); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setHi((h) => Math.max(h - 1, 0)); }
+        else if (e.key === 'Enter' && open && rows[hi]) { e.preventDefault(); choose(rows[hi]); }
+        else if (e.key === 'Escape') setOpen(false);
+      }} />
+    {open && <ul id={listId} role="listbox" className="picker-list">
+      {rows.map((m, i) => <li key={m.member_no} role="option" aria-selected={i === hi} className={i === hi ? 'on' : ''} onMouseEnter={() => setHi(i)} onMouseDown={(e) => { e.preventDefault(); choose(m); }}>
+        <b>{m.full_name}</b> <span className="mono small">{m.member_no}</span><div className="muted small">{HOUSE_NAME[m.house_id] ?? ''}{m.city ? ' · ' + m.city : ''}{m.profession ? ' · ' + m.profession : ''}</div></li>)}
+      {!rows.length && <li className="muted small" aria-disabled="true">{loading ? 'Searching…' : text ? 'No classmate matches. Check the spelling, or add them on the Houses page.' : 'No classmates on the register yet.'}</li>}
+    </ul>}
+  </div>;
 }

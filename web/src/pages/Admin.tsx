@@ -94,7 +94,7 @@ function Staff() {
     </div>
     <div className="card stack"><div className="card-h"><h2>Super admins and admins</h2>
       <button className="btn primary" onClick={() => open({ title: 'Give someone admin access', submit: 'Save', intro: <p className="small muted">They need an account first (approved sign-up, or added with an email). The change applies at their next sign-in.</p>,
-        fields: [{ name: 'who', label: 'Member number or email', required: true }, { name: 'access', label: 'Level', type: 'select', options: levelOptions, value: 'admin' }], onSubmit: (v) => setAccess(v.who, v.access) })}>Add an admin</button></div>
+        fields: [{ name: 'who', label: 'Classmate', type: 'member', required: true, hint: 'They need an account (approved sign-up or added with an email).' }, { name: 'access', label: 'Level', type: 'select', options: levelOptions, value: 'admin' }], onSubmit: (v) => setAccess(v.who, v.access) })}>Add an admin</button></div>
       <Gate error={s.error}><div className="tablewrap"><table><thead><tr><th>Name</th><th>Level</th><th className="hide-sm">Email</th><th className="hide-sm">Two-factor</th><th /></tr></thead><tbody>
         {staff.map((u) => { const lvl = levelOf(u.roles); const mine = u.id === me?.userId; const canEdit = !mine && (iAmSuper || lvl !== 'superadmin');
           return <tr key={u.id}><td><b>{u.display_name}</b>{mine && <span className="muted small"> (you)</span>}{u.status === 'suspended' && <> <Pill k="bad">Suspended</Pill></>}</td>
@@ -109,7 +109,7 @@ function Staff() {
       <p className="def" style={{ marginTop: 8 }}>Up to 5 admins in total (super admins included). Nobody can change their own access, only super admins can change a super admin, and the last super admin cannot be removed.</p></Gate>
     </div>
     <div className="card stack"><div className="card-h"><h2>House captains</h2>
-      <button className="btn" onClick={() => open({ title: 'Appoint a house captain', submit: 'Appoint', fields: [{ name: 'houseId', label: 'House', type: 'select', options: HOUSE_OPTS, value: 'H1' }, { name: 'memberNo', label: 'Member number', required: true }], onSubmit: (v) => api.post('/admin/captains', v).then(() => { toast('Captain appointed.'); s.reload(); }) })}>Appoint a captain</button></div>
+      <button className="btn" onClick={() => open({ title: 'Appoint a house captain', submit: 'Appoint', fields: [{ name: 'houseId', label: 'House', type: 'select', options: HOUSE_OPTS, value: 'H1' }, { name: 'memberNo', label: 'Classmate', type: 'member', required: true }], onSubmit: (v) => api.post('/admin/captains', v).then(() => { toast('Captain appointed.'); s.reload(); }) })}>Appoint a captain</button></div>
       {captains.length ? captains.map((u) => <div className="li" key={u.id}><div className="grow"><b>{u.display_name}</b> · {u.captain_of.map((h: string) => HOUSE_NAME[h]).join(', ')}</div></div>) : <p className="small muted" style={{ margin: 0 }}>No captains yet.</p>}
       <p className="def">Captains are members with one extra: they see which housemates have not yet given and can send them a friendly reminder.</p>
     </div></div>;

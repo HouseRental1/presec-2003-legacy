@@ -75,7 +75,7 @@ export default function Houses() {
             onSubmit: async (v) => { await api.post(`/houses/${house.id}`, v); toast('House profile saved.'); refresh(); } })}>Edit profile</button>
           <button className="btn sm" onClick={() => addClassmate(house.id)}>Add classmate</button>
           {house.members > 0 && <button className="btn sm" onClick={() => open({ title: `Appoint the ${HOUSE_NAME[house.id]} captain`, submit: 'Appoint', intro: <p className="small muted">The captain sees which housemates have not yet contributed (names only) and can send reminders. They need an account, so add their email first.</p>,
-            fields: [{ name: 'memberNo', label: 'Member number', required: true, hint: 'Shown next to each name in the list below.' }],
+            fields: [{ name: 'memberNo', label: 'Classmate', type: 'member', required: true, house: house.id }],
             onSubmit: async (v) => { await api.post('/admin/captains', { houseId: house.id, memberNo: v.memberNo }); toast('Captain appointed.'); refresh(); } })}>Appoint captain</button>}
         </div>}
       </div>
