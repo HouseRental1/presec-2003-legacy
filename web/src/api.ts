@@ -5,13 +5,20 @@ export class ApiError extends Error { constructor(public status: number, public 
 const myBuild = (document.querySelector('script[type="module"][src*="/assets/index-"]') as HTMLScriptElement | null)?.getAttribute('src')?.replace(/^.*(\/assets\/)/, '$1') ?? '';
 function checkBuild(server: string | null) {
   if (!server || !myBuild || server === myBuild) return;
-  // At most one automatic reload per tab every 10 minutes, so a deployment roll-over can never cause a reload loop.
+  // At most one automatic reload per tab every 2 minutes, so a deployment roll-over can never cause a reload loop.
   try {
     const last = Number(sessionStorage.getItem('reloaded-at') ?? 0);
-    if (Date.now() - last < 10 * 60 * 1000) return;
+    if (Date.now() - last < 2 * 60 * 1000) return;
     sessionStorage.setItem('reloaded-at', String(Date.now()));
   } catch { return; }
   window.location.reload();
+}
+
+/** Also check for a newer version whenever the person comes back to the tab (pages like sign-in make few API calls). */
+if (typeof window !== 'undefined') {
+  const recheck = () => { if (document.visibilityState === 'visible') fetch('/api/health', { cache: 'no-store' }).then((r) => checkBuild(r.headers.get('x-build'))).catch(() => {}); };
+  window.addEventListener('focus', recheck); document.addEventListener('visibilitychange', recheck);
+  setInterval(recheck, 5 * 60 * 1000);
 }
 
 async function call<T>(method: 'GET' | 'POST', url: string, body?: unknown): Promise<T> {
