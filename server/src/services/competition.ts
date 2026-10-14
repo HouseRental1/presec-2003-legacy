@@ -151,3 +151,39 @@ export async function updateHouse(db: Db, actor: Actor, id: string, input: z.inf
   const h = await one<any>(db, 'UPDATE houses SET about=$2, motto=$3 WHERE id=$1 RETURNING name', [id, input.about?.trim() || null, input.motto?.trim() || null]);
   await audit(db, actor, 'Updated house profile', id, h.name);
 }
+
+/* ───────── pledges: who promised what, and how much of it has been paid (same rule as each member's statement) */
+export async function pledgeList(db: Db | any, actor: Actor, house = '', search = '', status = '', sort = 'recent') {
+  need(actor, 'dir', 'view pledges');
+  const show = await seesAmounts(db, actor);
+  const rows = await q<any>(db, `
+    WITH paid AS (SELECT member_id, sum(amount_ghs) paid, max(paid_on) last_paid FROM payments WHERE status='verified' AND category='member' GROUP BY member_id)
+    SELECT m.id, m.member_no, m.full_name, hm.house_id, pl.amount pledged, pl.instalments, pl.created_at pledged_at,
+      (pl.replaces IS NOT NULL) adjusted, coalesce(pd.paid, 0)::bigint paid, pd.last_paid
+    FROM pledges pl JOIN members m ON m.id=pl.member_id
+    JOIN house_memberships hm ON hm.member_id=m.id AND hm.valid_to IS NULL
+    LEFT JOIN paid pd ON pd.member_id=m.id
+    WHERE pl.status='active' AND ($1 = '' OR hm.house_id=$1)
+      AND ($2 = '' OR (m.full_name || ' ' || m.member_no) ILIKE '%' || $2 || '%')`, [house, search]);
+  const out = rows.map((r: any) => {
+    const pledged = Number(r.pledged), paid = Number(r.paid), outstanding = Math.max(0, pledged - paid);
+    const state = paid >= pledged ? 'fulfilled' : paid > 0 ? 'part_paid' : 'not_started';
+    return { member_no: r.member_no, full_name: r.full_name, house_id: r.house_id, instalments: r.instalments, pledged_at: r.pledged_at, adjusted: r.adjusted, last_paid: r.last_paid, state,
+      pledged: show || r.id === actor.memberId ? pledged : null, paid: show || r.id === actor.memberId ? paid : null, outstanding: show || r.id === actor.memberId ? outstanding : null,
+      progress: pledged ? Math.min(1, paid / pledged) : 0, _p: pledged, _o: outstanding };
+  }).filter((r) => !status || r.state === status);
+  const key: Record<string, (a: any, b: any) => number> = {
+    recent: (a, b) => +new Date(b.pledged_at) - +new Date(a.pledged_at),
+    amount: (a, b) => b._p - a._p, outstanding: (a, b) => b._o - a._o, name: (a, b) => a.full_name.localeCompare(b.full_name),
+    progress: (a, b) => a.progress - b.progress,
+  };
+  out.sort(key[show ? sort : sort === 'amount' || sort === 'outstanding' ? 'recent' : sort] ?? key.recent);
+  const all = rows.map((r: any) => ({ p: Number(r.pledged), paid: Number(r.paid) }));
+  const [{ members }] = await q<any>(db, `SELECT count(*)::int members FROM house_memberships WHERE valid_to IS NULL AND ($1 = '' OR house_id=$1)`, [house]);
+  return {
+    amountsShown: show,
+    summary: { pledgers: rows.length, members, totalPledged: all.reduce((s, x) => s + x.p, 0), paidAgainst: all.reduce((s, x) => s + Math.min(x.p, x.paid), 0),
+      outstanding: all.reduce((s, x) => s + Math.max(0, x.p - x.paid), 0), fulfilled: all.filter((x) => x.paid >= x.p).length },
+    rows: out.map(({ _p, _o, ...r }) => r),
+  };
+}

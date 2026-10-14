@@ -115,6 +115,7 @@ export async function buildApp() {
 
   /* member money */
   app.get('/api/me/statement', read((a) => P.statement(pool, a)));
+  app.get('/api/pledges', read((a, req) => { const x = req.query as any; return C.pledgeList(pool, a, x.house ?? '', x.q ?? '', x.status ?? '', x.sort ?? 'recent'); }));
   app.post('/api/pledges', write(P.PledgeInput, (db, a, b) => P.setPledge(db, a, b)));
   app.post('/api/payments/initiate', write(P.InitiateInput, (db, a, b) => P.initiate(db, a, b)));
   app.post('/api/payments/evidence', write(P.EvidenceInput, (db, a, b) => P.submitEvidence(db, a, b)));

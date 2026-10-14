@@ -96,3 +96,20 @@ describe('sign-up with administrator approval', () => {
     expect(r.statusCode).toBe(403); expect(r.json().message).toMatch(/not approved/);
   });
 });
+
+describe('pledges list', () => {
+  it('shows each pledge with paid and outstanding, and tells administrators', async () => {
+    const K = await login('kofi@example.org');
+    expect((await post('/api/pledges', { amountGhs: 1200, instalments: 4 }, K)).statusCode).toBe(200);
+    await pool.query(`INSERT INTO payments (project_id, member_id, channel, source, currency, amount_original, amount_ghs, external_ref, paid_on, status)
+      SELECT 'P1', id, 'momo', 'gateway', 'GHS', 30000, 30000, 'PL-1', current_date, 'verified' FROM members WHERE member_no='P03-0001'`);
+    const r = (await get('/api/pledges', A)).json();
+    const kofi = r.rows.find((x: any) => x.member_no === 'P03-0001');
+    expect(kofi).toMatchObject({ pledged: 120000, paid: 30000, outstanding: 90000, state: 'part_paid', instalments: 4, adjusted: true });
+    expect(r.summary).toMatchObject({ pledgers: 1, totalPledged: 120000, paidAgainst: 30000, outstanding: 90000 });
+    expect((await get('/api/pledges?status=fulfilled', A)).json().rows).toHaveLength(0);
+    const n = (await pool.query(`SELECT body FROM notifications WHERE audience='perm:admin.members' AND body LIKE '%pledge%' ORDER BY id DESC LIMIT 1`)).rows[0];
+    expect(n.body).toMatch(/changed their pledge to GH₵\s?1,200/);
+    expect((await get('/api/pledges', K)).statusCode).toBe(200);     // members can see too (transparent year group)
+  });
+});

@@ -304,6 +304,7 @@ export async function setPledge(db: Db, actor: Actor, input: z.infer<typeof Pled
   const [p] = await q<any>(db, `INSERT INTO pledges (member_id, project_id, amount, instalments, status, replaces) VALUES ($1,$2,$3,$4,'active',$5) RETURNING *`,
     [actor.memberId, PROJECT, Math.round(input.amountGhs * 100), input.instalments, prev?.id ?? null]);
   await audit(db, actor, prev ? 'Adjusted pledge' : 'Made pledge', p.id, fmt(p.amount));
+  await notify(db, 'perm:admin.members', ['in_app'], `${actor.name} ${prev ? 'changed their pledge to' : 'pledged'} ${fmt(p.amount)} (${input.instalments} instalment${input.instalments > 1 ? 's' : ''}). See Pledges.`);
   return p;
 }
 

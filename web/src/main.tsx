@@ -15,17 +15,18 @@ import { Give, PayReturn, SetPassword } from './pages/Public';
 import Profile from './pages/Profile';
 import Community from './pages/Community';
 import Admin from './pages/Admin';
+import Pledges from './pages/Pledges';
 import { Link, useLocation } from 'react-router-dom';
 
 /** Administrators: everything, starting at the administration dashboard. */
 const ADMIN_NAV: [string, string, string?][] = [
-  ['/admin', 'Administration'], ['/', 'Home'], ['/money', 'Money'], ['/houses', 'Houses'], ['/project', 'Classroom project'], ['/votes', 'Votes'],
+  ['/admin', 'Administration'], ['/', 'Home'], ['/money', 'Money'], ['/pledges', 'Pledges'], ['/houses', 'Houses'], ['/project', 'Classroom project'], ['/votes', 'Votes'],
   ['/members', 'Year group'], ['/community', 'News & events'], ['/legacy', 'Legacy archive'], ['/notifications', 'Notifications'],
   ['/audit', 'Audit trail'], ['/give', 'Public page'],
 ];
 /** Members: view-only, plus pledging and paying their own contributions. */
 const MEMBER_NAV: [string, string, string?][] = [
-  ['/', 'Home'], ['/money', 'My pledge & giving'], ['/houses', 'Houses'], ['/project', 'Project progress'], ['/votes', 'Votes', 'vote'],
+  ['/', 'Home'], ['/money', 'My pledge & giving'], ['/pledges', 'Pledges'], ['/houses', 'Houses'], ['/project', 'Project progress'], ['/votes', 'Votes', 'vote'],
   ['/members', 'Year group'], ['/community', 'News & events'], ['/legacy', 'Legacy archive'], ['/notifications', 'Notifications'], ['/give', 'Public page'],
 ];
 const ADMIN_TABS = [['/admin', 'Admin'], ['/', 'Home'], ['/money', 'Money'], ['/houses', 'Houses'], ['/project', 'Project']];
@@ -155,7 +156,7 @@ function Shell() {
         <div className="row">{me.mfaRequired && !me.mfaPassed && me.roles.some((r) => r !== 'member') && <Link className="pill warn" to="/profile">Set up two-factor sign-in</Link>}<button className="btn sm" onClick={signOut}>Sign out</button></div>
       </div>
       <Routes>
-        <Route path="/" element={<Home />} /><Route path="/money" element={<Money />} /><Route path="/houses" element={<Houses />} />
+        <Route path="/" element={<Home />} /><Route path="/money" element={<Money />} /><Route path="/houses" element={<Houses />} /><Route path="/pledges" element={<Pledges />} />
         <Route path="/project" element={<Project />} /><Route path="/votes" element={isAdmin || can('vote') ? <Votes /> : <Navigate to="/" replace />} /><Route path="/members" element={<Members />} />
         <Route path="/profile" element={<Profile />} /><Route path="/community" element={<Community />} /><Route path="/admin" element={memberOnly(<Admin />)} />
         <Route path="/legacy" element={<Legacy />} /><Route path="/notifications" element={<Notifications />} /><Route path="/audit" element={memberOnly(<Audit />)} />
