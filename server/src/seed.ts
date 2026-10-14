@@ -39,7 +39,7 @@ export async function seed({ members = 380, quiet = false } = {}) {
   await tx(async (db) => {
     for (const [code, a] of Object.entries(ACCOUNTS)) await db.query('INSERT INTO ledger_accounts VALUES ($1,$2,$3)', [code, a.name, a.normal]);
     const settings: Record<string, unknown> = {
-      dual_approval_above: 5_000_000, member_vote_above: 10_000_000, admin_cap: 3, quorum_bp: 3000, member_participation: true,
+      dual_approval_above: 5_000_000, member_vote_above: 10_000_000, admin_cap: 5, quorum_bp: 3000, member_participation: true,
       fees: { momo_bp: 100, card_bp: 250 }, fx_indicative: { GHS: 1, USD: 15.6, GBP: 20.4 },
       custody: { entity: 'Registered association — name and number to confirm', signatories: '2 of 3 named signatories (to confirm)' },
     };

@@ -119,10 +119,15 @@ export function safeEqualHex(a: string, b: string) {
 }
 
 /* ───────────────────────── permissions */
-export type Role = 'admin' | 'committee' | 'treasurer' | 'approver' | 'auditor' | 'pm' | 'captain' | 'member' | 'school';
+export type Role = 'superadmin' | 'officer' | 'admin' | 'committee' | 'treasurer' | 'approver' | 'auditor' | 'pm' | 'captain' | 'member' | 'school';
 export const PERMS: Record<Role, string[]> = {
   // Members (non-admin): view everything shared with the year group; the only actions are pledging and paying their own contributions.
   member: ['own', 'pay', 'dir', 'proj.view'],
+  // Super admin: the money approvals (verify payments, approve payments out and variations, reconcile) come from the
+  // treasurer/approver/committee roles in the super-admin bundle; this role adds managing other super admins.
+  superadmin: ['super.manage'],
+  // Admin's operational role: record (not verify) payments, release approved payments, run governance and the project.
+  officer: ['fin.view', 'fin.record', 'fin.release', 'reports', 'proj.verify', 'gov.manage', 'rules.edit', 'proj.view'],
   captain: ['house.tools'],
   treasurer: ['fin.view', 'fin.record', 'fin.verify', 'fin.release', 'fin.reconcile', 'reports'],
   approver: ['fin.view', 'fin.verify', 'req.approve', 'reports'],
@@ -133,7 +138,7 @@ export const PERMS: Record<Role, string[]> = {
   school: ['proj.view'],
 };
 /** Roles whose actions need a passed MFA check when MFA is enforced. */
-export const PRIVILEGED: Role[] = ['admin', 'committee', 'treasurer', 'approver', 'auditor', 'pm'];
+export const PRIVILEGED: Role[] = ['superadmin', 'admin', 'officer', 'committee', 'treasurer', 'approver', 'auditor', 'pm'];
 
 export interface Actor {
   userId: string; name: string; roles: Role[]; memberId: string | null; mfaPassed: boolean;
@@ -142,7 +147,11 @@ export interface Actor {
 }
 export const perms = (a: Actor) => new Set([...a.roles.flatMap((r) => PERMS[r] ?? []), ...(a.extra ?? [])]);
 /** The two access levels shown in the app. "Admin" is this bundle of roles; everyone else is a view-only member. */
-export const ADMIN_BUNDLE: Role[] = ['admin', 'committee', 'treasurer', 'approver', 'pm'];
+export const ADMIN_BUNDLE: Role[] = ['admin', 'pm', 'officer'];
+/** Super admin = everything an admin has, plus the money approvals. */
+export const SUPER_BUNDLE: Role[] = ['superadmin', 'admin', 'pm', 'officer', 'committee', 'treasurer', 'approver'];
+export const STAFF_ROLES: Role[] = ['superadmin', 'admin', 'officer', 'committee', 'treasurer', 'approver', 'auditor', 'pm'];
+export const accessOf = (roles: string[]) => roles.includes('superadmin') ? 'superadmin' : roles.includes('admin') ? 'admin' : 'member';
 export const isAdmin = (a: Actor) => a.roles.includes('admin');
 const BASIC = new Set(['own', 'pay', 'vote', 'rsvp', 'dir', 'proj.view']);
 /** Server-side permission check. Every service function calls this; hiding a button is never enough. */

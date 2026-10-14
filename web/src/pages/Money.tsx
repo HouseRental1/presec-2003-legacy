@@ -76,13 +76,14 @@ function Verify() {
     {p.exception_reason && <div className="small" style={{ color: 'var(--bad)' }}>{p.exception_reason}</div>}
     {p.reversal_reason && <div className="small" style={{ color: 'var(--warn)' }}>Reversal reason: {p.reversal_reason}</div>}</div>
     <div className="row">
-      {p.status === 'pending' && <><button className="btn sm primary" onClick={() => act(() => api.post(`/finance/payments/${p.id}/verify`), 'Verified and posted.', qs.reload)}>Verify</button><button className="btn sm danger" onClick={() => act(() => api.post(`/finance/payments/${p.id}/reject`, { reason: 'Not found on the statement' }), 'Rejected.', qs.reload)}>Reject</button></>}
+      {p.status === 'pending' && can('fin.verify') && <><button className="btn sm primary" onClick={() => act(() => api.post(`/finance/payments/${p.id}/verify`), 'Verified and posted.', qs.reload)}>Verify</button><button className="btn sm danger" onClick={() => act(() => api.post(`/finance/payments/${p.id}/reject`, { reason: 'Not found on the statement' }), 'Rejected.', qs.reload)}>Reject</button></>}
       {p.status === 'exception' && !p.member_id && <button className="btn sm" onClick={() => open({ title: 'Assign this credit to a classmate', submit: 'Assign', fields: [{ name: 'memberNo', label: 'Member number', required: true }], onSubmit: (v) => api.post(`/finance/payments/${p.id}/assign`, v).then(() => { toast('Assigned. Someone else must verify it.'); qs.reload(); }) })}>Assign</button>}
       {p.evidence_file && <a className="btn sm" href={`/api/files/${p.evidence_file}`} target="_blank" rel="noreferrer">View slip</a>}
       {p.status === 'exception' && <button className="btn sm danger" onClick={() => act(() => api.post(`/finance/payments/${p.id}/reject`, { reason: 'Closed after investigation' }), 'Closed.', qs.reload)}>Close</button>}
       {p.status === 'reversal_requested' && <><button className="btn sm primary" onClick={() => act(() => api.post(`/finance/payments/${p.id}/reversal-confirm`), 'Reversed. Original kept.', qs.reload)}>Confirm reversal</button><button className="btn sm" onClick={() => act(() => api.post(`/finance/payments/${p.id}/reversal-decline`), 'Declined.', qs.reload)}>Decline</button></>}
     </div></div>;
   return <div className="stack">{dialog}
+    {!can('fin.verify') && <div className="callout">Only a <b>super admin</b> can verify or reject payments. You can record cash and bank payments here; they wait below until a super admin checks them.</div>}
     <div className="callout">One person records a manual payment; a different person verifies it against the bank or MoMo statement. The server enforces this.</div>
     {can('fin.record') && <div className="card stack"><h2>Record a payment</h2><div className="fgrid">
       <label className="f" htmlFor="rn">Member number<input id="rn" value={rec.memberNo} onChange={(e) => setRec({ ...rec, memberNo: e.target.value })} placeholder="P03-0000" /></label>
@@ -90,7 +91,7 @@ function Verify() {
       <label className="f" htmlFor="rc">Channel<select id="rc" value={rec.channel} onChange={(e) => setRec({ ...rec, channel: e.target.value })}><option value="bank">Bank</option><option value="cash">Cash</option></select></label>
       <label className="f" htmlFor="rr">Reference<input id="rr" value={rec.ref} onChange={(e) => setRec({ ...rec, ref: e.target.value })} /></label>
       <label className="f" htmlFor="rd">Date<input id="rd" type="date" value={rec.paidOn} onChange={(e) => setRec({ ...rec, paidOn: e.target.value })} /></label></div>
-      <button className="btn primary" onClick={() => act(() => api.post('/finance/payments', { ...rec, amountGhs: Number(rec.amountGhs) }), 'Recorded. Another officer must verify it.', qs.reload)}>Record</button></div>}
+      <button className="btn primary" onClick={() => act(() => api.post('/finance/payments', { ...rec, amountGhs: Number(rec.amountGhs) }), 'Recorded. A super admin will verify it.', qs.reload)}>Record</button></div>}
     <div className="card"><div className="card-h"><h2>Awaiting verification</h2><span className="muted small">{qs.data.pending.length}</span></div>{qs.data.pending.map(row)}{!qs.data.pending.length && <p className="muted">Nothing waiting.</p>}</div>
     <div className="card"><div className="card-h"><h2>Exceptions</h2></div>{qs.data.exceptions.map(row)}{!qs.data.exceptions.length && <p className="muted">No exceptions.</p>}</div>
     {qs.data.reversals.length > 0 && <div className="card"><div className="card-h"><h2>Reversals to confirm</h2></div>{qs.data.reversals.map(row)}</div>}

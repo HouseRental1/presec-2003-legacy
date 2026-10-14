@@ -21,8 +21,8 @@ afterAll(async () => { await app.close(); });
 describe('two access levels', () => {
   it('the founder is an administrator with the full bundle', async () => {
     const me = (await get('/api/me', A)).json();
-    expect(me.access).toBe('admin');
-    expect(me.roles).toEqual(expect.arrayContaining(['admin', 'committee', 'treasurer', 'approver', 'pm']));
+    expect(me.access).toBe('superadmin');
+    expect(me.roles).toEqual(expect.arrayContaining(['superadmin', 'admin', 'committee', 'treasurer', 'approver', 'pm', 'officer']));
   });
   it('a member can view, pledge and pay, but cannot change anything else', async () => {
     const K = await login('kofi@example.org');
@@ -43,7 +43,17 @@ describe('two access levels', () => {
   });
   it('an administrator can make a member an admin and back; the last admin stays', async () => {
     expect((await post('/api/admin/access', { who: 'P03-0001', access: 'admin' }, A)).statusCode).toBe(200);
-    expect((await get('/api/me', await login('kofi@example.org'))).json().access).toBe('admin');
+    const K = await login('kofi@example.org');
+    expect((await get('/api/me', K)).json().access).toBe('admin');
+    // an admin records a cash payment but cannot verify it; the super admin can
+    const rec = await post('/api/finance/payments', { memberNo: 'P03-0001', amountGhs: 50, channel: 'cash', ref: 'CASH-ADM-1', paidOn: new Date().toISOString().slice(0, 10) }, K);
+    expect(rec.statusCode, rec.body).toBe(200);
+    const pid = rec.json().id;
+    expect((await post(`/api/finance/payments/${pid}/verify`, {}, K)).statusCode).toBe(403);
+    expect((await post('/api/admin/access', { who: 'admin@example.org', access: 'member' }, K)).statusCode).toBe(403);   // admins can't touch super admins
+    expect((await post(`/api/finance/payments/${pid}/verify`, {}, A)).statusCode).toBe(200);
+    expect((await post('/api/admin/access', { who: 'kofi@example.org', access: 'superadmin' }, A)).statusCode).toBe(200);
+    expect((await get('/api/me', await login('kofi@example.org'))).json().access).toBe('superadmin');
     expect((await post('/api/admin/access', { who: 'kofi@example.org', access: 'member' }, A)).statusCode).toBe(200);
     expect((await get('/api/me', await login('kofi@example.org'))).json().access).toBe('member');
     expect((await post('/api/admin/access', { who: 'admin@example.org', access: 'member' }, A)).statusCode).toBe(403);   // not yourself
@@ -105,8 +115,9 @@ describe('pledges list', () => {
       SELECT 'P1', id, 'momo', 'gateway', 'GHS', 30000, 30000, 'PL-1', current_date, 'verified' FROM members WHERE member_no='P03-0001'`);
     const r = (await get('/api/pledges', A)).json();
     const kofi = r.rows.find((x: any) => x.member_no === 'P03-0001');
-    expect(kofi).toMatchObject({ pledged: 120000, paid: 30000, outstanding: 90000, state: 'part_paid', instalments: 4, adjusted: true });
-    expect(r.summary).toMatchObject({ pledgers: 1, totalPledged: 120000, paidAgainst: 30000, outstanding: 90000 });
+    // Kofi also has the GH₵ 50 cash payment verified earlier in this file
+    expect(kofi).toMatchObject({ pledged: 120000, paid: 35000, outstanding: 85000, state: 'part_paid', instalments: 4, adjusted: true });
+    expect(r.summary).toMatchObject({ pledgers: 1, totalPledged: 120000, paidAgainst: 35000, outstanding: 85000 });
     expect((await get('/api/pledges?status=fulfilled', A)).json().rows).toHaveLength(0);
     const n = (await pool.query(`SELECT body FROM notifications WHERE audience='perm:admin.members' AND body LIKE '%pledge%' ORDER BY id DESC LIMIT 1`)).rows[0];
     expect(n.body).toMatch(/changed their pledge to GH₵\s?1,200/);

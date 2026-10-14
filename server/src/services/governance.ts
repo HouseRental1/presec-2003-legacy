@@ -64,7 +64,7 @@ export async function closeBallot(db: Db, actor: Actor, proposalId: string) {
 }
 
 export async function listProposals(db: Db | any, actor: Actor) {
-  if (!actor.memberId && !actor.roles.includes('committee')) throw forbid('Voting is for members.');
+  if (!actor.memberId && !actor.roles.includes('committee') && !actor.roles.includes('admin')) throw forbid('Voting is for members.');
   return q(db, `SELECT p.id, p.title, p.description, p.threshold, p.quorum_bp, p.opens_on, p.closes_on, p.status, p.result, p.eligible_count, p.linked_type, p.linked_id,
       (SELECT count(*)::int FROM voter_roll v WHERE v.proposal_id=p.id) turnout,
       EXISTS (SELECT 1 FROM voter_roll v WHERE v.proposal_id=p.id AND v.member_id=$1) i_voted,

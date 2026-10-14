@@ -197,12 +197,12 @@ describe('AC-17/18 audit trail integrity and the legacy archive', () => {
   });
   it('administrators are capped', async () => {
     const kwame = await as(app, 'kwame');
-    await pool.query(`INSERT INTO user_roles (user_id, role) SELECT id, 'admin' FROM users WHERE email IN ('yaw@presec2003.test','nana@presec2003.test')`);
+    await pool.query(`INSERT INTO user_roles (user_id, role) SELECT id, 'admin' FROM users WHERE email IN ('yaw@presec2003.test','nana@presec2003.test','efua@presec2003.test','kofi@presec2003.test')`);
     const [{ id }] = await q<any>(pool, `SELECT id FROM users WHERE email='ama@presec2003.test'`);
     const { grantRole } = await import('../src/services/members.js');
     const { tx } = await import('../src/lib.js');
     const actor = { userId: (await q<any>(pool, `SELECT id FROM users WHERE email='kwame@presec2003.test'`))[0].id, name: 'Kwame', roles: ['admin' as const], memberId: null, mfaPassed: true };
-    await expect(tx((db) => grantRole(db, actor, id, 'admin'))).rejects.toThrow(/limit 3/);
+    await expect(tx((db) => grantRole(db, actor, id, 'admin'))).rejects.toThrow(/limit 5/);
     void kwame;
   });
 });

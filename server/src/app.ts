@@ -7,7 +7,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { ZodError, z } from 'zod';
-import { pool, tx, q, Actor, AppError, config, perms, verifyAuditChain, need, hmacHex, Db, one } from './lib.js';
+import { pool, tx, q, Actor, AppError, config, perms, accessOf, verifyAuditChain, need, hmacHex, Db, one } from './lib.js';
 import * as M from './services/members.js';
 import * as P from './services/payments.js';
 import * as F from './services/finance.js';
@@ -91,7 +91,7 @@ export async function buildApp() {
   app.get('/api/me', read(async (a) => {
     const member = a.memberId ? await one(pool, `SELECT m.member_no, m.full_name, m.show_on_wall, hm.house_id FROM members m JOIN house_memberships hm ON hm.member_id=m.id AND hm.valid_to IS NULL WHERE m.id=$1`, [a.memberId]) : null;
     const [part] = await q<any>(pool, `SELECT value FROM settings WHERE key='member_participation'`);
-    return { ...a, perms: [...perms(a)], member, mfaRequired: config.requireMfa, access: a.roles.includes('admin') ? 'admin' : 'member', memberParticipation: part?.value === true };
+    return { ...a, perms: [...perms(a)], member, mfaRequired: config.requireMfa, access: accessOf(a.roles), memberParticipation: part?.value === true };
   }));
 
   /* public page — only approved figures, no individual amounts */

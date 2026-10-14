@@ -141,7 +141,7 @@ function Shell() {
   if (loc.pathname === '/pay/return') return <PayReturn />;
   if (loc.pathname === '/set-password') return <SetPassword />;
   if (!me) return <Login />;
-  const isAdmin = me.access === 'admin';
+  const isAdmin = me.access !== 'member';
   if (justSignedIn) { justSignedIn = false; const home = isAdmin ? '/admin' : '/'; if (loc.pathname !== home && (loc.pathname === '/' || loc.pathname === '/admin')) return <Navigate to={home} replace />; }
   const items = (isAdmin ? ADMIN_NAV : MEMBER_NAV).filter(([, , p]) => !p || can(p));
   const memberOnly = (el: ReactNode) => isAdmin ? el : <Navigate to="/" replace />;
@@ -152,7 +152,7 @@ function Shell() {
     </aside>
     <main className="main">
       <div className="topbar">
-        <Link to="/profile" style={{ color: 'inherit', textDecoration: 'none' }}><b>{me.name}</b> <span className={'pill ' + (isAdmin ? 'ok' : '')} style={{ marginLeft: 6 }}>{isAdmin ? 'Admin' : 'Member'}</span> <span className="muted small">{''}{me.member ? ' · ' + me.member.member_no : ''}</span></Link>
+        <Link to="/profile" style={{ color: 'inherit', textDecoration: 'none' }}><b>{me.name}</b> <span className={'pill ' + (isAdmin ? 'ok' : '')} style={{ marginLeft: 6 }}>{me.access === 'superadmin' ? 'Super admin' : isAdmin ? 'Admin' : 'Member'}</span> <span className="muted small">{''}{me.member ? ' · ' + me.member.member_no : ''}</span></Link>
         <div className="row">{me.mfaRequired && !me.mfaPassed && me.roles.some((r) => r !== 'member') && <Link className="pill warn" to="/profile">Set up two-factor sign-in</Link>}<button className="btn sm" onClick={signOut}>Sign out</button></div>
       </div>
       <Routes>

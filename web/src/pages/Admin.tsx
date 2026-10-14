@@ -69,32 +69,44 @@ function Signups({ onChange }: { onChange: () => void }) {
   </div>;
 }
 
+const LEVEL: Record<string, string> = { superadmin: 'Super admin', admin: 'Admin', member: 'Member' };
+const levelOf = (roles: string[]) => roles.includes('superadmin') ? 'superadmin' : roles.includes('admin') ? 'admin' : 'member';
+
 function Staff() {
   const s = useLoad<any[]>('/admin/staff'); const act = useAction(); const toast = useToast(); const [dialog, open] = useDialog();
-  const { me, reload } = useSession();
-  const admins = (s.data ?? []).filter((u) => u.roles.includes('admin'));
+  const { me, can, reload } = useSession();
+  const iAmSuper = can('super.manage');
+  const staff = (s.data ?? []).filter((u) => u.roles.includes('admin')).sort((a, b) => (levelOf(b.roles) === 'superadmin' ? 1 : 0) - (levelOf(a.roles) === 'superadmin' ? 1 : 0));
   const captains = (s.data ?? []).filter((u) => u.captain_of?.length);
-  const setAccess = (who: string, access: 'admin' | 'member', after = s.reload) => api.post('/admin/access', { who, access }).then((r: any) => { toast(`${r.name} is now ${access === 'admin' ? 'an administrator' : 'a member (view-only)'}.`); after(); });
+  const setAccess = (who: string, access: string) => api.post<any>('/admin/access', { who, access }).then((r) => { toast(`${r.name} is now ${r.label === 'member' ? 'a member (view-only)' : r.label === 'admin' ? 'an admin' : 'a super admin'}.`); s.reload(); });
+  const levelOptions: [string, string][] = iAmSuper ? [['admin', 'Admin'], ['superadmin', 'Super admin (money approvals)']] : [['admin', 'Admin']];
   return <div className="stack">{dialog}
     <div className="card stack"><div className="card-h"><h2>Who can do what</h2></div>
-      <div className="grid-2">
-        <div><b>Admin</b><p className="small muted" style={{ margin: '4px 0 0' }}>Everything: the register, money in and out, the project, votes, news and settings. Opens on the Administration page after sign-in. Payments out still need two different admins to approve.</p></div>
-        <div><b>Member</b> (everyone else)<p className="small muted" style={{ margin: '4px 0 0' }}>View-only: home, houses and contributions, project progress and photos, year group, news. The only things a member can do are make a pledge and pay their own contributions.</p></div>
+      <div className="grid-3" style={{ display: 'grid', gap: 16, gridTemplateColumns: 'repeat(auto-fit,minmax(min(100%,240px),1fr))' }}>
+        <div><b>Super admin</b><p className="small muted" style={{ margin: '4px 0 0' }}>Everything an admin can do, <b>plus the money approvals</b>: verifies recorded payments and bank transfers, approves payments out and cost changes, reconciles the bank. Only a super admin can make another super admin.</p></div>
+        <div><b>Admin</b><p className="small muted" style={{ margin: '4px 0 0' }}>Runs the platform: sign-ups, the register, houses, the project, news and votes. Can <b>record</b> cash and bank payments and raise payment requests, but cannot verify or approve them.</p></div>
+        <div><b>Member</b> (everyone else)<p className="small muted" style={{ margin: '4px 0 0' }}>View-only: home, houses and contributions, pledges, project progress and photos, year group, news. Can make a pledge and pay their own contributions.</p></div>
       </div>
+      <p className="def" style={{ margin: 0 }}>Every manual payment passes through two people: an admin records it, a super admin verifies it. Payments out above GH₵ 50,000 need two different approvers, so appoint two super admins before large payments.</p>
       <label className="row" style={{ gap: 8, alignItems: 'center' }}><input type="checkbox" style={{ width: 'auto' }} checked={!!me?.memberParticipation}
         onChange={(e) => act(() => api.post('/admin/participation', { on: e.target.checked }), e.target.checked ? 'Members can now vote and reply to events.' : 'Voting and event replies are now admin-only.', reload)} />
         <span className="small">Also let members vote on ballots and reply to events <span className="muted">(off by default)</span></span></label>
     </div>
-    <div className="card stack"><div className="card-h"><h2>Administrators</h2>
-      <button className="btn primary" onClick={() => open({ title: 'Make a classmate an administrator', submit: 'Make admin', intro: <p className="small muted">They need an account first (added with an email address). The change applies at their next sign-in.</p>,
-        fields: [{ name: 'who', label: 'Member number or email', required: true }], onSubmit: (v) => setAccess(v.who, 'admin') })}>Make someone admin</button></div>
-      <Gate error={s.error}><div className="tablewrap"><table><thead><tr><th>Name</th><th>Email</th><th>Two-factor</th><th /></tr></thead><tbody>
-        {admins.map((u) => <tr key={u.id}><td><b>{u.display_name}</b>{u.id === me?.userId && <span className="muted small"> (you)</span>}{u.status === 'suspended' && <> <Pill k="bad">Suspended</Pill></>}</td><td className="small">{u.email}</td>
-          <td>{u.mfa ? <Pill k="ok">On</Pill> : <Pill k="warn">Not set</Pill>}</td>
-          <td>{u.id !== me?.userId && <div className="row"><button className="btn sm" onClick={() => act(() => setAccess(u.email, 'member'), 'Done.')}>Change to member</button>
-            <button className="btn sm danger" onClick={() => act(() => api.post(`/admin/users/${u.id}/suspend`, { suspended: u.status !== 'suspended' }), 'Updated.', s.reload)}>{u.status === 'suspended' ? 'Restore' : 'Suspend'}</button></div>}</td></tr>)}
+    <div className="card stack"><div className="card-h"><h2>Super admins and admins</h2>
+      <button className="btn primary" onClick={() => open({ title: 'Give someone admin access', submit: 'Save', intro: <p className="small muted">They need an account first (approved sign-up, or added with an email). The change applies at their next sign-in.</p>,
+        fields: [{ name: 'who', label: 'Member number or email', required: true }, { name: 'access', label: 'Level', type: 'select', options: levelOptions, value: 'admin' }], onSubmit: (v) => setAccess(v.who, v.access) })}>Add an admin</button></div>
+      <Gate error={s.error}><div className="tablewrap"><table><thead><tr><th>Name</th><th>Level</th><th className="hide-sm">Email</th><th className="hide-sm">Two-factor</th><th /></tr></thead><tbody>
+        {staff.map((u) => { const lvl = levelOf(u.roles); const mine = u.id === me?.userId; const canEdit = !mine && (iAmSuper || lvl !== 'superadmin');
+          return <tr key={u.id}><td><b>{u.display_name}</b>{mine && <span className="muted small"> (you)</span>}{u.status === 'suspended' && <> <Pill k="bad">Suspended</Pill></>}</td>
+          <td><Pill k={lvl === 'superadmin' ? 'ok' : ''}>{LEVEL[lvl]}</Pill></td><td className="small hide-sm">{u.email}</td>
+          <td className="hide-sm">{u.mfa ? <Pill k="ok">On</Pill> : <Pill k="warn">Not set</Pill>}</td>
+          <td>{canEdit && <div className="row" style={{ flexWrap: 'wrap' }}>
+            {iAmSuper && lvl === 'admin' && <button className="btn sm" onClick={() => act(() => setAccess(u.email, 'superadmin'), 'Done.')}>Make super admin</button>}
+            {lvl === 'superadmin' && <button className="btn sm" onClick={() => act(() => setAccess(u.email, 'admin'), 'Done.')}>Change to admin</button>}
+            <button className="btn sm" onClick={() => act(() => setAccess(u.email, 'member'), 'Done.')}>Change to member</button>
+            <button className="btn sm danger" onClick={() => act(() => api.post(`/admin/users/${u.id}/suspend`, { suspended: u.status !== 'suspended' }), 'Updated.', s.reload)}>{u.status === 'suspended' ? 'Restore' : 'Suspend'}</button></div>}</td></tr>; })}
       </tbody></table></div>
-      <p className="def" style={{ marginTop: 8 }}>Up to 3 administrators. You cannot change your own access, and the last administrator cannot be removed.</p></Gate>
+      <p className="def" style={{ marginTop: 8 }}>Up to 5 admins in total (super admins included). Nobody can change their own access, only super admins can change a super admin, and the last super admin cannot be removed.</p></Gate>
     </div>
     <div className="card stack"><div className="card-h"><h2>House captains</h2>
       <button className="btn" onClick={() => open({ title: 'Appoint a house captain', submit: 'Appoint', fields: [{ name: 'houseId', label: 'House', type: 'select', options: HOUSE_OPTS, value: 'H1' }, { name: 'memberNo', label: 'Member number', required: true }], onSubmit: (v) => api.post('/admin/captains', v).then(() => { toast('Captain appointed.'); s.reload(); }) })}>Appoint a captain</button></div>

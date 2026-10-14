@@ -48,7 +48,7 @@ export async function recoverFirstAdmin(db: Db, input: z.infer<typeof FirstAdmin
   if (users.length !== 1) throw new AppError(409, 'recovery_closed', 'Recovery is only available while the platform has a single account. Use “Forgot password?” instead.');
   const id = users[0].id;
   await db.query(`UPDATE users SET email=lower($2), password_hash=$3, display_name=$4, status='active', totp_secret=NULL WHERE id=$1`, [id, input.email.trim(), await hashPassword(input.password), input.name.trim()]);
-  await db.query(`INSERT INTO user_roles (user_id, role) VALUES ($1,'admin'),($1,'committee'),($1,'treasurer'),($1,'approver'),($1,'pm') ON CONFLICT DO NOTHING`, [id]);
+  await db.query(`INSERT INTO user_roles (user_id, role) VALUES ($1,'superadmin'),($1,'admin'),($1,'officer'),($1,'committee'),($1,'treasurer'),($1,'approver'),($1,'pm') ON CONFLICT DO NOTHING`, [id]);
   await db.query('DELETE FROM sessions WHERE user_id=$1', [id]);
   await db.query('DELETE FROM login_failures');
   await audit(db, null, 'Reset the set-up administrator', input.email.trim().toLowerCase());
@@ -62,7 +62,7 @@ export async function createFirstAdmin(db: Db, input: { name: string; email: str
   if (n > 0) throw new AppError(409, 'already_set_up', 'Set-up is already complete. Sign in instead.');
   for (const [code, a] of Object.entries(ACCOUNTS)) await db.query('INSERT INTO ledger_accounts VALUES ($1,$2,$3) ON CONFLICT DO NOTHING', [code, a.name, a.normal]);
   const defaults: Record<string, unknown> = {
-    dual_approval_above: 5_000_000, member_vote_above: 10_000_000, admin_cap: 3, quorum_bp: 3000,
+    dual_approval_above: 5_000_000, member_vote_above: 10_000_000, admin_cap: 5, quorum_bp: 3000,
     fees: { momo_bp: 100, card_bp: 250 }, fx_indicative: { GHS: 1, USD: 15.6, GBP: 20.4 },
   };
   for (const [k, v] of Object.entries(defaults)) await db.query('INSERT INTO settings VALUES ($1,$2) ON CONFLICT DO NOTHING', [k, JSON.stringify(v)]);
@@ -75,7 +75,7 @@ export async function createFirstAdmin(db: Db, input: { name: string; email: str
   await db.query(`UPDATE projects SET site=coalesce(site,'PRESEC Legon campus, Accra'), description=coalesce(description,'A six-unit classroom block given to Presbyterian Boys’ Secondary School, Legon, by the Ɔdadeɛ 2003 year group.') WHERE id='P1'`);
   const [u] = await q<any>(db, 'INSERT INTO users (email, password_hash, display_name) VALUES (lower($1),$2,$3) RETURNING id', [input.email.trim(), await hashPassword(input.password), input.name.trim()]);
   // The founder also sits on the executive committee so set-up can proceed before others join.
-  await db.query(`INSERT INTO user_roles (user_id, role) VALUES ($1,'admin'),($1,'committee'),($1,'treasurer'),($1,'approver'),($1,'pm')`, [u.id]);
+  await db.query(`INSERT INTO user_roles (user_id, role) VALUES ($1,'superadmin'),($1,'admin'),($1,'officer'),($1,'committee'),($1,'treasurer'),($1,'approver'),($1,'pm')`, [u.id]);
   await audit(db, null, 'Created first administrator', input.email.trim().toLowerCase());
   return { ok: true, email: input.email.trim().toLowerCase() };
 }
