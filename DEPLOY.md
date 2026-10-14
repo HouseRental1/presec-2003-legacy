@@ -37,18 +37,13 @@ The app is one Vercel project: a Fastify function that serves the API and the we
 
 ## 3. Create the first administrator (once)
 
-From a computer with Node 22, using the Neon **direct** connection string (`DATABASE_URL_UNPOOLED` in Vercel):
+The simplest way is through Vercel itself:
 
-```bash
-npm ci && npm -w server run build
-DATABASE_URL="postgres://…neon.tech/…?sslmode=require" \
-ADMIN_EMAIL="chair@example.org" ADMIN_PASSWORD="a long passphrase of 14+ characters" ADMIN_NAME="Committee Chair" \
-HOUSES="H1:Kwansa,H2:Clerk,H3:Engmann,H4:Akro,H5:Riis,H6:Labone,H7:Ako-Adjei,H8:Owusu-Parry" \
-PROJECT_NAME="Legacy Project 1: six-unit classroom block, PRESEC Legon" \
-NODE_ENV=production node server/dist/bootstrap.js
-```
+1. In **Settings → Environment Variables**, add `ADMIN_EMAIL`, `ADMIN_PASSWORD` (14+ characters) and `ADMIN_NAME`.
+2. Redeploy. The build log shows `Bootstrapped. Sign in as …`.
+3. **Delete `ADMIN_PASSWORD` from Vercel** once you have signed in. The set-up runs only while the database has no users, so later deploys skip it either way.
 
-This creates the chart of accounts, the default control settings, the eight houses, the project and **one administrator**. Running it a second time changes nothing.
+It creates the chart of accounts, the default control settings, PRESEC's eight original houses, Legacy Project 1 and the one administrator. (Alternatively, run `node server/dist/bootstrap.js` from your own computer with the same variables and the Neon direct connection string.)
 
 ## 4. Connect Paystack
 
