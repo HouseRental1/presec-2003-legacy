@@ -20,9 +20,15 @@ export function Give() {
       <div className="eyebrow" style={{ color: 'inherit', opacity: .8 }}>PRESEC Legon · Ɔdadeɛ 2003 year group</div>
       <h1 style={{ fontSize: 'clamp(1.8rem,5vw,2.6rem)' }}>A six-unit classroom block for PRESEC, from the Class of 2003</h1>
       {p.data && <><div className="bigfig">{ghs(p.data.raised)}</div><Bar v={p.data.raised / Math.max(1, p.data.budget)} />
-        <p>{pct(p.data.raised / Math.max(1, p.data.budget))} of {ghs(p.data.budget)} raised · building {p.data.acceptedProgress.toFixed(0)}% complete (inspected and signed off)</p></>}
+        <p>{p.data.budget > 0 ? `${pct(p.data.raised / p.data.budget)} of the ${ghs(p.data.budget)} budget raised · building ${p.data.acceptedProgress.toFixed(0)}% complete (inspected and signed off)` : 'Raised so far. The budget will be published once it is approved by the year group.'}</p></>}
     </div></div>
     <div className="public-body stack">
+      {p.data?.phases?.length > 0 && <div className="card stack"><h2>Where the project is</h2>
+        {p.data.project?.description && <p className="small" style={{ maxWidth: '65ch' }}>{p.data.project.description}</p>}
+        <ol className="phases" style={{ listStyle: 'none', padding: 0, margin: 0 }}>{p.data.phases.map((ph: any, i: number) => <li key={ph.key} className={'phase ' + ph.status} style={{ cursor: 'default' }}>
+          <span className="st">{i + 1}. {ph.status === 'complete' ? 'Done' : ph.status === 'in_progress' ? 'Now' : 'Next'}</span><span className="nm">{ph.name}</span>
+          <div className="bar"><i style={{ width: ph.status === 'complete' ? '100%' : ph.status === 'in_progress' ? '50%' : '0%' }} /></div></li>)}</ol></div>}
+      {p.data?.updates?.length > 0 && <div className="card"><div className="card-h"><h2>Latest news from the site</h2></div>{p.data.updates.map((u: any, i: number) => <div className="li" key={i}><div className="grow"><b>{u.title}</b><p className="small" style={{ whiteSpace: 'pre-wrap', margin: '4px 0' }}>{u.body}</p><div className="def">{new Date(u.posted_at).toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</div></div></div>)}</div>}
       <div className="grid-2">
         <form className="card stack" onSubmit={donate}><h2>Give to the classroom block</h2>
           <p className="small muted">Your gift goes to the year group’s project account and is receipted. Gifts from friends of the school count toward the building, not the house competition.</p>

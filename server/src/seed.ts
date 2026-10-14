@@ -46,6 +46,10 @@ export async function seed({ members = 380, quiet = false } = {}) {
     for (const [k, v] of Object.entries(settings)) await db.query('INSERT INTO settings VALUES ($1,$2)', [k, JSON.stringify(v)]);
     for (const [id, name] of [['H1', 'Kwansa'], ['H2', 'Clerk'], ['H3', 'Engmann'], ['H4', 'Akro'], ['H5', 'Riis'], ['H6', 'Labone'], ['H7', 'Ako-Adjei'], ['H8', 'Owusu-Parry']]) await db.query('INSERT INTO houses VALUES ($1,$2)', [id, name]);
     await db.query(`INSERT INTO projects VALUES ('P1','Legacy Project 1: six-unit classroom block, PRESEC Legon','construction')`);
+    await db.query(`UPDATE projects SET site='PRESEC Legon campus, Accra', sponsor='Ɔdadeɛ 2003 year group (executive committee)', school_contact='Headmaster’s office, PRESEC Legon',
+      description='A six-unit classroom block given to Presbyterian Boys’ Secondary School, Legon, by the Ɔdadeɛ 2003 year group.',
+      objectives='Relieve overcrowding with six new classrooms; leave a lasting gift from the Class of 2003.', scope='Six classrooms, veranda, accessible ramp, electrical and drainage works.' WHERE id='P1'`);
+    await db.query(`SELECT create_lifecycle('P1')`);
     await db.query(`INSERT INTO budget_versions (project_id, version, total, lines, approved_by, note) VALUES ('P1',1,82000000,$1,'Member vote P1 + committee resolution','Baseline approved with contract award')`,
       [JSON.stringify({ contract: 74200000, fees: 3800000, contingency: 4000000 })]);
 
@@ -192,6 +196,16 @@ export async function seed({ members = 380, quiet = false } = {}) {
     for (let i = 0; i < n2; i++) await G.castVote(db, fakeMember(voters[V - 1 - i]), p2.id, i < n2 * 0.76 ? 'yes' : i < n2 * 0.92 ? 'no' : 'abstain');
     const p3 = await G.createProposal(db, users.akosua, { title: 'Adopt house competition rules v1.1 for the next drive', description: 'Weights 55% target / 45% participation; per-member target GH₵ 1,200. Applies only to the next period.', threshold: 'two_thirds', quorumPct: 30, opensOn: addDays(T, -3), closesOn: addDays(T, 14), linkedType: 'rules', linkedId: '1.1' });
     for (let i = 0; i < n3; i++) await G.castVote(db, fakeMember(voters[i]), p3.id, i < n3 * 0.72 ? 'yes' : i < n3 * 0.93 ? 'no' : 'abstain');
+  });
+  // Sample lifecycle: initiation, planning and procurement signed off; execution under way.
+  await tx(async (db) => {
+    await db.query(`UPDATE phase_deliverables SET status='done', evidence='Seeded sample record', updated_by=$1, updated_at=now() WHERE phase_key IN ('initiation','planning','procurement')`, [users.nana.userId]);
+    await db.query(`UPDATE phase_deliverables SET status='done', evidence='Seeded sample record', updated_by=$1, updated_at=now() WHERE phase_key='execution' AND seq IN (1,2)`, [users.nana.userId]);
+    await db.query(`UPDATE phase_deliverables SET status='in_progress' WHERE phase_key='execution' AND seq IN (3,4,5)`);
+    for (const [k, s0, e0] of [['initiation', -150, -120], ['planning', -120, -80], ['procurement', -80, -55]] as const)
+      await db.query(`UPDATE project_phases SET status='complete', actual_start=$2, actual_end=$3, gate_approved_by=$4, gate_approved_at=now(), gate_note='Committee resolution (sample)' WHERE key=$1`, [k, addDays(T, s0), addDays(T, e0), users.akosua.userId]);
+    await db.query(`UPDATE project_phases SET status='in_progress', actual_start=$1 WHERE key='execution'`, [addDays(T, -55)]);
+    await db.query(`INSERT INTO project_updates (project_id, phase_key, title, body, public, posted_by) VALUES ('P1','execution','Foundations complete','Foundations passed inspection; the structural frame is under way.', true, $1)`, [users.nana.userId]);
   });
   // Sample history is already 'delivered'; only new notices go out.
   await pool.query('UPDATE notifications SET expanded=true');

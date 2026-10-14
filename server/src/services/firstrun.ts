@@ -71,6 +71,8 @@ export async function createFirstAdmin(db: Db, input: { name: string; email: str
     await db.query('INSERT INTO houses VALUES ($1,$2) ON CONFLICT DO NOTHING', [id, name]);
   }
   await db.query(`INSERT INTO projects VALUES ('P1',$1,'initiation') ON CONFLICT DO NOTHING`, [input.projectName ?? DEFAULT_PROJECT]);
+  if (!(await q(db, `SELECT 1 FROM project_phases WHERE project_id='P1'`)).length) await db.query(`SELECT create_lifecycle('P1')`);
+  await db.query(`UPDATE projects SET site=coalesce(site,'PRESEC Legon campus, Accra'), description=coalesce(description,'A six-unit classroom block given to Presbyterian Boys’ Secondary School, Legon, by the Ɔdadeɛ 2003 year group.') WHERE id='P1'`);
   const [u] = await q<any>(db, 'INSERT INTO users (email, password_hash, display_name) VALUES (lower($1),$2,$3) RETURNING id', [input.email.trim(), await hashPassword(input.password), input.name.trim()]);
   // The founder also sits on the executive committee so set-up can proceed before others join.
   await db.query(`INSERT INTO user_roles (user_id, role) VALUES ($1,'admin'),($1,'committee'),($1,'pm')`, [u.id]);

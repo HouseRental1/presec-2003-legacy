@@ -3,20 +3,26 @@ import { api, ghs, date } from '../api';
 import { Bar, Gate, Pill, useAction, useLoad, useSession, useToast } from '../ui';
 import { useDialog, uploadFile } from '../forms';
 import { TriBars } from './Home';
+import { LifecycleTab, DetailsTab, UpdatesTab } from './Lifecycle';
 
 export default function Project() {
   const { can } = useSession();
   const p = useLoad<any>('/project');
+  const lc = useLoad<any>('/project/lifecycle');
   const act = useAction(); const toast = useToast(); const [dialog, open] = useDialog();
-  const [tab, setTab] = useState('works');
-  if (!p.data) return <Gate error={p.error}><p className="muted">Loading…</p></Gate>;
+  const [tab, setTab] = useState('lifecycle');
+  if (!p.data || !lc.data) return <Gate error={p.error ?? lc.error}><p className="muted">Loading…</p></Gate>;
   const d = p.data;
   const done = (m: string) => () => { toast(m); p.reload(); };
   return <div className="stack">{dialog}
-    <div><div className="eyebrow">Contract {d.contract?.id} · {d.contract?.supplier}</div><h1>Classroom project</h1></div>
-    <div className="grid-2"><div className="card"><h2 style={{ marginBottom: 10 }}>Progress by evidence</h2><TriBars p={d.progress} /></div>
-      <div className="card"><dl className="kv"><dt>Contract sum</dt><dd>{ghs(d.contract?.value)}</dd><dt>Programme</dt><dd>{date(d.contract?.start_on)} – {date(d.contract?.end_on)}</dd><dt>Retention</dt><dd>{(d.contract?.retention_bp ?? 0) / 100}% of each certificate</dd><dt>Budget</dt><dd>v{d.budgetVersions.at(-1)?.version} · {ghs(d.budgetVersions.at(-1)?.total)}</dd></dl></div></div>
-    <div className="tabs" role="tablist">{[['works', 'Work packages'], ['photos', 'Site photos'], ['budget', 'Budget & variations'], ['quality', 'Inspections, defects, risks'], ['coi', 'Conflicts of interest']].map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}</div>
+    <div><div className="eyebrow">{lc.data.project?.site || 'PRESEC Legon'}</div><h1>{lc.data.project?.name ?? 'Classroom project'}</h1>
+      <p className="small muted" style={{ marginTop: 4 }}>{(() => { const c = lc.data.phases.find((x: any) => x.key === lc.data.currentPhase); return c ? `Current phase: ${c.seq}. ${c.name} · ${c.closed}/${c.total} items closed` : ''; })()}</p></div>
+    {tab !== 'lifecycle' && tab !== 'details' && tab !== 'updates' && <div className="grid-2"><div className="card"><h2 style={{ marginBottom: 10 }}>Construction progress by evidence</h2><TriBars p={d.progress} /></div>
+      <div className="card"><dl className="kv"><dt>Contract</dt><dd>{d.contract ? `${d.contract.id} · ${d.contract.supplier}` : 'Not signed yet'}</dd><dt>Contract sum</dt><dd>{d.contract ? ghs(d.contract.value) : '—'}</dd><dt>Programme</dt><dd>{d.contract ? `${date(d.contract.start_on)} – ${date(d.contract.end_on)}` : '—'}</dd><dt>Retention</dt><dd>{d.contract ? `${d.contract.retention_bp / 100}% of each certificate` : '—'}</dd><dt>Budget</dt><dd>{d.budgetVersions.length ? `v${d.budgetVersions.at(-1).version} · ${ghs(d.budgetVersions.at(-1).total)}` : 'No approved baseline yet'}</dd></dl></div></div>}
+    <div className="tabs" role="tablist">{[['lifecycle', 'Lifecycle'], ['details', 'Details'], ['updates', 'Updates'], ['works', 'Construction'], ['photos', 'Site photos'], ['budget', 'Budget & variations'], ['quality', 'Inspections, defects, risks'], ['coi', 'Conflicts of interest']].map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}</div>
+    {tab === 'lifecycle' && <LifecycleTab lc={lc.data} reload={() => { lc.reload(); p.reload(); }} />}
+    {tab === 'details' && <DetailsTab lc={lc.data} reload={lc.reload} />}
+    {tab === 'updates' && <UpdatesTab lc={lc.data} reload={lc.reload} />}
     {tab === 'works' && <div className="card"><div className="tablewrap"><table><thead><tr><th>Package</th><th className="r">Weight</th><th className="r">Budget</th><th>Reported</th><th>Verified</th><th>Accepted</th><th /></tr></thead><tbody>
       {d.workPackages.map((w: any) => <tr key={w.id}><td><b>{w.name}</b><div className="mono muted">{w.id}</div></td><td className="r">{w.weight_bp / 100}%</td><td className="r">{ghs(w.budget)}</td>
         {(['reported_pct', 'verified_pct', 'accepted_pct'] as const).map((k) => <td key={k} style={{ minWidth: 90 }}><div className="small num">{w[k]}%</div><Bar v={w[k] / 100} /></td>)}
@@ -25,7 +31,7 @@ export default function Project() {
           {can('proj.verify') && w.verified_pct < w.reported_pct && <button className="btn sm" onClick={() => open({ title: 'Verify on site · ' + w.name, submit: 'Record verification', fields: [{ name: 'pct', label: 'Progress you saw on site (%)', type: 'number', value: w.reported_pct }, { name: 'evidence', label: 'What you checked', value: 'Site visit' }, { name: 'photo', label: 'Photo (optional)', type: 'file', accept: 'image/*' }], onSubmit: async (v) => { const fileId = v.photo ? await uploadFile(v.photo, 'site_photo', { type: 'wp', id: w.id }) : undefined; await api.post(`/project/wp/${w.id}/verify`, { pct: v.pct, evidence: v.evidence, fileId }); done('Verified on site.')(); } })}>Verify</button>}
           {can('proj.edit') && w.accepted_pct < w.verified_pct && <button className="btn sm" onClick={() => open({ title: 'Record acceptance · ' + w.name, submit: 'Record acceptance', fields: [{ name: 'pct', label: 'Accepted progress (%)', type: 'number', value: w.verified_pct }, { name: 'inspector', label: 'Inspector (name and role)', required: true }, { name: 'evidence', label: 'Inspection note', value: 'Inspection passed' }], onSubmit: (v) => api.post(`/project/wp/${w.id}/accept`, v).then(done('Acceptance recorded.')) })}>Accept</button>}
         </div></td></tr>)}
-    </tbody></table></div><p className="def" style={{ marginTop: 8 }}>Different people record each stage. Accepting work never authorises payment.</p></div>}
+    </tbody></table></div>{!d.workPackages.length && <p className="muted">No work packages yet. Add them under Administration → Project set-up once the bill of quantities is ready (weights must total 100%).</p>}<p className="def" style={{ marginTop: 8 }}>Different people record each stage. Accepting work never authorises payment.</p></div>}
     {tab === 'budget' && <div className="stack">
       <div className="card"><div className="card-h"><h2>Budget versions</h2><span className="muted small">Baselines are never overwritten</span></div><div className="tablewrap"><table><thead><tr><th>Version</th><th className="r">Total</th><th>Approved by</th><th>Note</th></tr></thead><tbody>{d.budgetVersions.map((b: any) => <tr key={b.version}><td>v{b.version}</td><td className="r">{ghs(b.total)}</td><td className="small">{b.approved_by}</td><td className="small">{b.note}</td></tr>)}</tbody></table></div></div>
       <div className="card"><div className="card-h"><h2>Variations</h2>{can('proj.edit') && <button className="btn sm" onClick={() => open({ title: 'Propose a variation', submit: 'Propose', fields: [{ name: 'title', label: 'Change', required: true }, { name: 'amountGhs', label: 'Cost (GH₵)', type: 'number', required: true }, { name: 'reason', label: 'Reason', required: true }], onSubmit: (v) => api.post('/project/variations', v).then((r: any) => { toast(r.route === 'member_vote' ? 'Above the threshold: the committee will put it to a member vote.' : 'Sent to the committee.'); p.reload(); }) })}>Propose a variation</button>}</div>

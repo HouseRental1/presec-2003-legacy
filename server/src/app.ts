@@ -20,6 +20,7 @@ import * as K from './services/community.js';
 import * as S from './services/setup.js';
 import * as Msg from './services/messaging.js';
 import * as FR from './services/firstrun.js';
+import * as LC from './services/lifecycle.js';
 import { trialBalance } from './services/ledger.js';
 import { waitUntil } from '@vercel/functions';
 
@@ -95,7 +96,7 @@ export async function buildApp() {
   app.get('/api/public', async () => {
     const d = await F.dashboard(pool); const p = await J.progress(pool);
     const wall = await q(pool, `SELECT DISTINCT m.full_name FROM members m JOIN payments p ON p.member_id=m.id AND p.status='verified' WHERE m.show_on_wall ORDER BY 1`);
-    return { raised: d.cashReceived, budget: d.budget, spent: d.spent, acceptedProgress: p.accepted, wall: wall.map((w: any) => w.full_name) };
+    return { raised: d.cashReceived, budget: d.budget, spent: d.spent, acceptedProgress: p.accepted, wall: wall.map((w: any) => w.full_name), ...(await LC.publicLifecycle(pool)) };
   });
 
   /* dashboard & competition */
@@ -160,6 +161,14 @@ export async function buildApp() {
 
   /* project */
   app.get('/api/project', read((a) => J.overview(pool, a)));
+  app.get('/api/project/lifecycle', read((a) => LC.lifecycle(pool, a)));
+  app.post('/api/project/details', write(LC.DetailsInput, (db, a, b) => LC.updateDetails(db, a, b)));
+  app.post('/api/project/phases/:id/dates', write(LC.PhaseDatesInput, (db, a, b, r) => LC.setPhaseDates(db, a, id(r), b)));
+  app.post('/api/project/phases/:id/gate', write(LC.GateInput, (db, a, b, r) => LC.approveGate(db, a, id(r), b)));
+  app.post('/api/project/phases/:id/reopen', write(z.object({ reason: z.string().trim().min(3) }), (db, a, b, r) => LC.reopenPhase(db, a, id(r), b.reason)));
+  app.post('/api/project/deliverables', write(LC.DeliverableInput, (db, a, b) => LC.addDeliverable(db, a, b)));
+  app.post('/api/project/deliverables/:id', write(LC.DeliverableUpdate, (db, a, b, r) => LC.updateDeliverable(db, a, Number(id(r)), b)));
+  app.post('/api/project/updates', write(LC.UpdateInput, (db, a, b) => LC.postUpdate(db, a, b)));
   app.post('/api/project/wp/:id/report', write(J.PctInput, (db, a, b, r) => J.reportProgress(db, a, id(r), b)));
   app.post('/api/project/wp/:id/verify', write(J.PctInput, (db, a, b, r) => J.verifyProgress(db, a, id(r), b)));
   app.post('/api/project/wp/:id/accept', write(J.AcceptInput, (db, a, b, r) => J.acceptProgress(db, a, id(r), b)));
