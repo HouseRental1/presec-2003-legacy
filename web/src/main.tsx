@@ -126,7 +126,7 @@ function Login() {
     {needCode && <label className="f" htmlFor="cd">Authenticator code<input id="cd" inputMode="numeric" pattern="\d{6}" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} /></label>}
     {err && <div className="callout bad">{err}</div>}
     <button className="btn primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button>
-    {!setup?.needsSetup && <div className="signup-cta"><span className="small muted">Ɔdadeɛ 2003 and not signed up yet?</span><button type="button" className="btn" onClick={() => setSigningUp(true)}>Request access</button></div>}
+    {!setup?.needsSetup && <div className="join-yeargroup"><span className="small muted">Ɔdadeɛ 2003 and not signed up yet?</span><button type="button" className="btn" onClick={() => setSigningUp(true)}>Request access</button></div>}
     <div className="row between"><button type="button" className="btn sm" onClick={forgot}>Forgot password?</button><Link to="/give" className="small">Public page</Link></div>
     {sent && <div className="callout ok">If that email is registered, a reset link is on its way by email and SMS.</div>}
     {setup?.canRecover && <button type="button" className="btn sm" onClick={() => setRecovering(true)}>Locked out during set-up? Reset the administrator account</button>}
