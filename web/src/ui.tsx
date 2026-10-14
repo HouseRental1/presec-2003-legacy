@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import { createContext, ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { api, ApiError, HOUSE_COLOR, HOUSE_NAME } from './api';
 
@@ -42,6 +43,8 @@ export function useAction() {
 
 export const Pill = ({ k = '', children }: { k?: string; children: ReactNode }) => <span className={'pill ' + k}>{children}</span>;
 export const Bar = ({ v, color }: { v: number; color?: string }) => <div className="bar"><i style={{ width: `${Math.max(0, Math.min(100, v * 100))}%`, background: color }} /></div>;
+/** A classmate's name that opens their page. */
+export const PersonLink = ({ no, name }: { no?: string | null; name: string }) => no ? <Link to={`/people/${no}`} className="person-link">{name}</Link> : <>{name}</>;
 export const House = ({ id }: { id: string }) => <span className="row" style={{ gap: 6, display: 'inline-flex' }}><span className="dot" style={{ background: HOUSE_COLOR[id] }} />{HOUSE_NAME[id] ?? id}</span>;
 export const Tile = ({ l, v, d }: { l: string; v: ReactNode; d?: string }) => <div className="card stat"><div className="l">{l}</div><div className="v">{v}</div>{d && <div className="def">{d}</div>}</div>;
 export function Gate({ error, children }: { error: ApiError | null; children: ReactNode }) {

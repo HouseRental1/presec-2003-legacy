@@ -16,6 +16,7 @@ import Profile from './pages/Profile';
 import Community from './pages/Community';
 import Admin from './pages/Admin';
 import Pledges from './pages/Pledges';
+import Person from './pages/Person';
 import { Link, useLocation } from 'react-router-dom';
 
 /** Administrators: everything, starting at the administration dashboard. */
@@ -156,7 +157,7 @@ function Shell() {
         <div className="row">{me.mfaRequired && !me.mfaPassed && me.roles.some((r) => r !== 'member') && <Link className="pill warn" to="/profile">Set up two-factor sign-in</Link>}<button className="btn sm" onClick={signOut}>Sign out</button></div>
       </div>
       <Routes>
-        <Route path="/" element={<Home />} /><Route path="/money" element={<Money />} /><Route path="/houses" element={<Houses />} /><Route path="/pledges" element={<Pledges />} />
+        <Route path="/" element={<Home />} /><Route path="/money" element={<Money />} /><Route path="/houses" element={<Houses />} /><Route path="/pledges" element={<Pledges />} /><Route path="/people/:no" element={<Person />} />
         <Route path="/project" element={<Project />} /><Route path="/votes" element={isAdmin || can('vote') ? <Votes /> : <Navigate to="/" replace />} /><Route path="/members" element={<Members />} />
         <Route path="/profile" element={<Profile />} /><Route path="/community" element={<Community />} /><Route path="/admin" element={memberOnly(<Admin />)} />
         <Route path="/legacy" element={<Legacy />} /><Route path="/notifications" element={<Notifications />} /><Route path="/audit" element={memberOnly(<Audit />)} />

@@ -1,7 +1,8 @@
+import { Link } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { api, ghs, HOUSE_NAME, houseIdFrom, today } from '../api';
 import { useDialog, downloadCsv } from '../forms';
-import { Gate, Pill, useAction, useLoad, useSession, useToast } from '../ui';
+import { Gate, PersonLink, Pill, useAction, useLoad, useSession, useToast } from '../ui';
 
 const HOUSE_OPTS = Object.entries(HOUSE_NAME) as [string, string][];
 const ROLES: [string, string][] = [['committee', 'Executive committee'], ['treasurer', 'Treasurer'], ['approver', 'Finance approver'], ['auditor', 'Independent reviewer'], ['pm', 'Project manager'], ['school', 'School representative'], ['admin', 'Platform administrator']];
@@ -64,7 +65,7 @@ function Signups({ onChange }: { onChange: () => void }) {
             onSubmit: async (v) => { const x = await api.post<any>(`/admin/signups/${r.id}/decision`, { approve: true, houseId: v.houseId }); done(`${r.full_name} approved as ${x.memberNo}.`); } })}>Approve</button>
           <button className="btn danger" onClick={() => open({ title: `Decline ${r.full_name}`, submit: 'Decline', fields: [{ name: 'note', label: 'Reason (kept for the record)', value: '' }],
             onSubmit: async (v) => { await api.post(`/admin/signups/${r.id}/decision`, { approve: false, note: v.note }); done('Request declined.'); } })}>Decline</button>
-        </div> : <div className="def">{view === 'approved' ? `Approved as ${r.member_no}` : 'Declined'} by {r.decided_by} · {r.decided_at ? new Date(r.decided_at).toLocaleDateString('en-GB') : ''}{r.decision_note ? ' · ' + r.decision_note : ''}</div>}
+        </div> : <div className="def">{view === 'approved' ? <>Approved as <Link to={`/people/${r.member_no}`}>{r.member_no}</Link></> : 'Declined'} by {r.decided_by} · {r.decided_at ? new Date(r.decided_at).toLocaleDateString('en-GB') : ''}{r.decision_note ? ' · ' + r.decision_note : ''}</div>}
       </div>)}</Gate>
   </div>;
 }
@@ -97,7 +98,7 @@ function Staff() {
         fields: [{ name: 'who', label: 'Classmate', type: 'member', required: true, hint: 'They need an account (approved sign-up or added with an email).' }, { name: 'access', label: 'Level', type: 'select', options: levelOptions, value: 'admin' }], onSubmit: (v) => setAccess(v.who, v.access) })}>Add an admin</button></div>
       <Gate error={s.error}><div className="tablewrap"><table><thead><tr><th>Name</th><th>Level</th><th className="hide-sm">Email</th><th className="hide-sm">Two-factor</th><th /></tr></thead><tbody>
         {staff.map((u) => { const lvl = levelOf(u.roles); const mine = u.id === me?.userId; const canEdit = !mine && (iAmSuper || lvl !== 'superadmin');
-          return <tr key={u.id}><td><b>{u.display_name}</b>{mine && <span className="muted small"> (you)</span>}{u.status === 'suspended' && <> <Pill k="bad">Suspended</Pill></>}</td>
+          return <tr key={u.id}><td><b><PersonLink no={u.member_no} name={u.display_name} /></b>{mine && <span className="muted small"> (you)</span>}{u.status === 'suspended' && <> <Pill k="bad">Suspended</Pill></>}</td>
           <td><Pill k={lvl === 'superadmin' ? 'ok' : ''}>{LEVEL[lvl]}</Pill></td><td className="small hide-sm">{u.email}</td>
           <td className="hide-sm">{u.mfa ? <Pill k="ok">On</Pill> : <Pill k="warn">Not set</Pill>}</td>
           <td>{canEdit && <div className="row" style={{ flexWrap: 'wrap' }}>
@@ -110,7 +111,7 @@ function Staff() {
     </div>
     <div className="card stack"><div className="card-h"><h2>House captains</h2>
       <button className="btn" onClick={() => open({ title: 'Appoint a house captain', submit: 'Appoint', fields: [{ name: 'houseId', label: 'House', type: 'select', options: HOUSE_OPTS, value: 'H1' }, { name: 'memberNo', label: 'Classmate', type: 'member', required: true }], onSubmit: (v) => api.post('/admin/captains', v).then(() => { toast('Captain appointed.'); s.reload(); }) })}>Appoint a captain</button></div>
-      {captains.length ? captains.map((u) => <div className="li" key={u.id}><div className="grow"><b>{u.display_name}</b> · {u.captain_of.map((h: string) => HOUSE_NAME[h]).join(', ')}</div></div>) : <p className="small muted" style={{ margin: 0 }}>No captains yet.</p>}
+      {captains.length ? captains.map((u) => <div className="li" key={u.id}><div className="grow"><b><PersonLink no={u.member_no} name={u.display_name} /></b> · {u.captain_of.map((h: string) => HOUSE_NAME[h]).join(', ')}</div></div>) : <p className="small muted" style={{ margin: 0 }}>No captains yet.</p>}
       <p className="def">Captains are members with one extra: they see which housemates have not yet given and can send them a friendly reminder.</p>
     </div></div>;
 }

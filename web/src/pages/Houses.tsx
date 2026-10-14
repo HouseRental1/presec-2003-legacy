@@ -3,7 +3,7 @@ import { InviteSheet, Invite } from '../forms';
 import { Link } from 'react-router-dom';
 import { api, ghs, pct, date, HOUSE_BASE, HOUSE_COLOR, HOUSE_NAME } from '../api';
 import { useDialog } from '../forms';
-import { Bar, Gate, House, useAction, useLoad, useSession, useToast } from '../ui';
+import { Bar, Gate, House, PersonLink, useAction, useLoad, useSession, useToast } from '../ui';
 
 const HOUSE_OPTS = Object.entries(HOUSE_NAME) as [string, string][];
 
@@ -141,7 +141,7 @@ function Roster({ houseId, admin, onInvite }: { houseId: string; admin: boolean;
     {!shown && <p className="def" style={{ margin: 0 }}>Individual amounts are visible to the finance team only. You can see who has given, and your own amount.</p>}
     {rows.length === 0 ? <p className="small muted" style={{ margin: 0 }}>{qs ? 'No one matches.' : 'No one in this house yet.'}</p> :
       <div className="tablewrap"><table><thead><tr><th>Name</th><th className="hide-sm">No.</th><th className="hide-sm">City</th><th className="hide-sm">Profession</th><th>Given</th><th className="r">Amount</th><th className="hide-sm">Last paid</th>{admin && <th>Sign-in</th>}</tr></thead>
-        <tbody>{rows.map((m) => <tr key={m.member_no}><td>{m.full_name}<div className="show-sm def">{[m.member_no, m.city].filter(Boolean).join(' · ')}</div></td><td className="mono hide-sm">{m.member_no}</td><td className="hide-sm">{m.city ?? ''}</td><td className="hide-sm">{m.profession ?? ''}</td>
+        <tbody>{rows.map((m) => <tr key={m.member_no}><td><PersonLink no={m.member_no} name={m.full_name} /><div className="show-sm def">{[m.member_no, m.city].filter(Boolean).join(' · ')}</div></td><td className="mono hide-sm">{m.member_no}</td><td className="hide-sm">{m.city ?? ''}</td><td className="hide-sm">{m.profession ?? ''}</td>
           <td>{m.contributed ? <span className="pill ok">Yes{m.payments > 1 ? ` · ${m.payments}×` : ''}</span> : <span className="muted">Not yet</span>}</td>
           <td className="r num">{m.given != null ? ghs(m.given) : m.contributed ? '•••' : '—'}</td><td className="hide-sm">{m.last_paid ? date(m.last_paid) : ''}</td>{admin && <td>{m.has_account ? <button className="btn sm" onClick={async () => { try { const r = await api.post<any>(`/admin/members/${m.member_no}/invite`); onInvite({ name: m.full_name, link: r.link, delivery: r.delivery }); } catch (e) { setErr((e as Error).message); } }}>Invite link</button> : <span className="muted small">No email</span>}</td>}</tr>)}</tbody></table></div>}
     {rows.length < total && <button className="btn sm" onClick={() => setPage(page + 1)}>Show more ({total - rows.length})</button>}

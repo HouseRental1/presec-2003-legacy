@@ -142,7 +142,7 @@ export async function profile(db: Db | any, actor: Actor) {
 export async function listStaff(db: Db | any, actor: Actor) {
   need(actor, 'admin.members', 'view roles');
   return q(db, `SELECT u.id, u.email, u.display_name, u.status, u.totp_secret IS NOT NULL AND u.totp_secret NOT LIKE 'PENDING:%' mfa,
-      array_agg(r.role ORDER BY r.role) roles, (SELECT array_agg(house_id) FROM house_captains c WHERE c.user_id=u.id) captain_of
+      array_agg(r.role ORDER BY r.role) roles, (SELECT array_agg(house_id) FROM house_captains c WHERE c.user_id=u.id) captain_of, (SELECT member_no FROM members m WHERE m.user_id=u.id) member_no
     FROM users u JOIN user_roles r ON r.user_id=u.id GROUP BY u.id HAVING array_agg(r.role) <> ARRAY['member']::text[] ORDER BY u.display_name`);
 }
 export async function revokeRole(db: Db, actor: Actor, userId: string, role: Role) {

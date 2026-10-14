@@ -124,3 +124,39 @@ describe('pledges list', () => {
     expect((await get('/api/pledges', K)).statusCode).toBe(200);     // members can see too (transparent year group)
   });
 });
+
+describe('classmate pages: view, edit, remove', () => {
+  it('everyone can view a page; contact details only for admins and the person', async () => {
+    const K = await login('kofi@example.org');
+    const p = (await get('/api/people/P03-0001', A)).json();
+    expect(p).toMatchObject({ member_no: 'P03-0001', full_name: 'Kofi Boateng', contact: { email: 'kofi@example.org' }, can: { edit: true, remove: true } });
+    expect(p.giving.paid).toBeGreaterThan(0);
+    const t = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'ama.test@example.org', password: 'member-password-1' } })).json().token;
+    const other = (await get('/api/people/P03-0001', { authorization: 'Bearer ' + t })).json();
+    expect(other.contact).toBeNull(); expect(other.can).toEqual({ edit: false, remove: false });
+    expect((await get('/api/people/P03-0001', K)).json().contact.email).toBe('kofi@example.org');
+  });
+  it('only a super admin edits; house corrections and email changes apply', async () => {
+    const K = await login('kofi@example.org');
+    expect((await post('/api/people/P03-0001', { fullName: 'Kofi B', houseId: 'H2' }, K)).statusCode).toBe(403);
+    const r = await post('/api/people/P03-0001', { fullName: 'Kofi Asante Boateng', email: 'kofi.b@example.org', phone: '0244 000 111', city: 'Tema', houseId: 'H3', houseReason: 'Was in Engmann' }, A);
+    expect(r.statusCode, r.body).toBe(200);
+    expect(r.json().changed).toEqual(expect.arrayContaining(['email', 'name', 'city', 'house H2 → H3']));
+    const p = (await get('/api/people/P03-0001', A)).json();
+    expect(p).toMatchObject({ full_name: 'Kofi Asante Boateng', house_id: 'H3', city: 'Tema', contact: { email: 'kofi.b@example.org' } });
+    expect((await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'kofi.b@example.org', password: 'a-long-enough-pass' } })).statusCode).toBe(200);
+  });
+  it('removes: no history → deleted completely; with history → archived and hidden', async () => {
+    const fresh = await post('/api/houses/members', { fullName: 'Typo Person', houseId: 'H1' }, A);
+    expect((await post(`/api/people/${fresh.json().memberNo}/remove`, { reason: 'Added by mistake' }, A)).json().outcome).toBe('deleted');
+    expect((await get(`/api/people/${fresh.json().memberNo}`, A)).statusCode).toBe(400);
+    const gone = await post('/api/people/P03-0001/remove', { reason: 'Asked to leave the platform' }, A);
+    expect(gone.json().outcome).toBe('archived');
+    expect((await get('/api/members?q=Kofi', A)).json().total).toBe(0);
+    expect((await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'kofi.b@example.org', password: 'a-long-enough-pass' } })).statusCode).toBe(403);
+    expect((await get('/api/people/P03-0001', A)).json().removed.reason).toMatch(/Asked to leave/);
+    expect((await post('/api/people/P03-0001/restore', {}, A)).statusCode).toBe(200);
+    expect((await get('/api/members?q=Kofi', A)).json().total).toBe(1);
+    expect((await post(`/api/people/${(await get('/api/me', A)).json().member?.member_no ?? 'X'}/remove`, { reason: 'self' }, A)).statusCode).not.toBe(200);
+  });
+});

@@ -16,6 +16,7 @@ import * as J from './services/project.js';
 import * as G from './services/governance.js';
 import * as L from './services/legacy.js';
 import * as SU from './services/signup.js';
+import * as PE from './services/people.js';
 import * as A from './services/accounts.js';
 import * as K from './services/community.js';
 import * as S from './services/setup.js';
@@ -113,6 +114,10 @@ export async function buildApp() {
   app.get('/api/dashboard', read(async () => ({ ...(await F.dashboard(pool)), progress: await J.progress(pool).then((p) => ({ reported: p.reported, verified: p.verified, accepted: p.accepted })) })));
   app.get('/api/standings', read(async (_a, req) => C.standings(pool, (req.query as any).asOf)));
   app.get('/api/rules', read(async () => C.ruleVersions(pool)));
+  app.get('/api/people/:id', read((a, req) => PE.person(pool, a, id(req))));
+  app.post('/api/people/:id', write(PE.PersonEdit, (db, a, b, r) => PE.editPerson(db, a, id(r), b)));
+  app.post('/api/people/:id/remove', write(PE.RemoveInput, (db, a, b, r) => PE.removePerson(db, a, id(r), b)));
+  app.post('/api/people/:id/restore', write(null, (db, a, _b, r) => PE.restorePerson(db, a, id(r))));
   app.get('/api/houses', read((a) => C.houseOverview(pool, a)));
   app.get('/api/houses/:id/members', read((a, req) => { const x = req.query as any; return C.houseMembers(pool, a, id(req), x.q ?? '', x.sort ?? 'name', Number(x.page ?? 0)); }));
   app.post('/api/houses/amounts', write(C.AmountsVisibility, (db, a, b) => C.setAmountsVisibility(db, a, b)));

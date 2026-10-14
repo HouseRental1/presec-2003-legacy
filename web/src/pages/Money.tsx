@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ghs, date, today, HOUSE_NAME } from '../api';
-import { Gate, Pill, STATUS, Tile, useAction, useLoad, useSession, useToast } from '../ui';
+import { Gate, PersonLink, Pill, STATUS, Tile, useAction, useLoad, useSession, useToast } from '../ui';
 import { useDialog, uploadFile, MemberPicker } from '../forms';
 
 export default function Money() {
@@ -160,7 +160,7 @@ function Overview() {
       <Gate error={r.error}>{!rows.length ? <p className="muted small" style={{ margin: 0 }}>{q ? 'No payment matches.' : 'No payments yet.'}</p> :
         <div className="tablewrap"><table><thead><tr><th>Date</th><th>From</th><th className="hide-sm">How</th><th>Status</th><th className="hide-sm">Checked by</th><th className="r">Amount</th></tr></thead><tbody>
           {rows.map((p) => <tr key={p.id}><td>{date(p.paid_on)}</td>
-            <td>{p.full_name ?? p.payer_name ?? 'Unmatched'}<div className="def">{p.member_no ?? ''}{p.house_id ? ' · ' + HOUSE_NAME[p.house_id] : ''}{p.category === 'donor' ? ' · friend of the school' : ''}</div></td>
+            <td>{p.full_name ? <PersonLink no={p.member_no} name={p.full_name} /> : p.payer_name ?? 'Unmatched'}<div className="def">{p.member_no ?? ''}{p.house_id ? ' · ' + HOUSE_NAME[p.house_id] : ''}{p.category === 'donor' ? ' · friend of the school' : ''}</div></td>
             <td className="hide-sm">{p.source === 'gateway' ? 'Paystack' : p.source === 'self' ? 'Reported transfer' : 'Recorded'} · {p.network ?? p.channel}<div className="def mono">{p.external_ref}</div></td>
             <td><Pill k={STATUS[p.status]?.[1] ?? ''}>{STATUS[p.status]?.[0] ?? p.status}</Pill></td>
             <td className="hide-sm small">{p.source === 'gateway' ? 'Automatic' : p.verified_by_name ?? '—'}{p.recorded_by_name && <div className="def">recorded by {p.recorded_by_name}</div>}</td>

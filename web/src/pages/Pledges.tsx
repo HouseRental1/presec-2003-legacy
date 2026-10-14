@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ghs, pct, date, HOUSE_COLOR, HOUSE_NAME } from '../api';
-import { Bar, Gate, House, Tile, useAction, useLoad, useSession } from '../ui';
+import { Bar, Gate, House, PersonLink, Tile, useAction, useLoad, useSession } from '../ui';
 
 const STATE: Record<string, [string, string]> = { fulfilled: ['Paid in full', 'ok'], part_paid: ['Part paid', 'warn'], not_started: ['Not started', ''] };
 
@@ -44,7 +44,7 @@ export default function Pledges() {
       {!d ? <p className="muted">Loading…</p> : d.rows.length === 0 ? <p className="small muted" style={{ margin: 0 }}>{house || status || qs ? 'No pledges match.' : 'No pledges yet. Classmates pledge from “My pledge & giving”.'}</p> :
         <div className="tablewrap"><table><thead><tr><th>Name</th><th className="hide-sm">House</th><th className="r">Pledged</th><th className="r hide-sm">Paid</th><th className="r">Outstanding</th><th className="hide-sm" style={{ minWidth: 120 }}>Progress</th><th className="hide-sm">Pledged on</th></tr></thead>
           <tbody>{d.rows.map((r: any) => <tr key={r.member_no}>
-            <td>{r.full_name}<div className="def">{r.member_no}<span className="show-sm"> · {HOUSE_NAME[r.house_id]}</span></div></td>
+            <td><PersonLink no={r.member_no} name={r.full_name} /><div className="def">{r.member_no}<span className="show-sm"> · {HOUSE_NAME[r.house_id]}</span></div></td>
             <td className="hide-sm"><House id={r.house_id} /></td>
             <td className="r num">{r.pledged != null ? ghs(r.pledged) : '•••'}<div className="def">{r.instalments > 1 ? `${r.instalments} instalments` : 'one payment'}</div></td>
             <td className="r num hide-sm">{r.paid != null ? ghs(r.paid) : '•••'}</td>
