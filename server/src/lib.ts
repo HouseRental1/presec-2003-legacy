@@ -10,7 +10,8 @@ export const config = {
   port: Number(process.env.PORT ?? 8080),
   databaseUrl: process.env.DATABASE_URL ?? 'postgres://legacy:legacy@localhost:5432/class_legacy',
   webOrigin: process.env.WEB_ORIGIN ?? 'http://localhost:5173',
-  requireMfa: process.env.NODE_ENV === 'production' ? true : process.env.REQUIRE_MFA === 'true',
+  // On by default in production; REQUIRE_MFA=false switches it off (set-up period only — turn it back on before launch).
+  requireMfa: process.env.REQUIRE_MFA ? process.env.REQUIRE_MFA === 'true' : process.env.NODE_ENV === 'production',
   webhookSecret: process.env.PAYMENT_WEBHOOK_SECRET ?? 'dev-webhook-secret',
   sessionHours: Number(process.env.SESSION_HOURS ?? 12),
   loginRateMax: Number(process.env.LOGIN_RATE_MAX ?? 10),   // sign-in attempts per IP per minute
