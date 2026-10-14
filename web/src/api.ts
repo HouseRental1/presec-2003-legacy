@@ -1,12 +1,21 @@
 /** Thin API client. Session cookie is httpOnly; the custom header is the CSRF guard for writes. */
 export class ApiError extends Error { constructor(public status: number, public code: string, message: string) { super(message); } }
 
+/** If the server is running a newer build than this tab, reload once to pick it up (avoids old code meeting new data). */
+const myBuild = (document.querySelector('script[type="module"][src*="/assets/index-"]') as HTMLScriptElement | null)?.getAttribute('src')?.replace(/^.*(\/assets\/)/, '$1') ?? '';
+function checkBuild(server: string | null) {
+  if (!server || !myBuild || server === myBuild) return;
+  try { if (sessionStorage.getItem('reloaded-for') === server) return; sessionStorage.setItem('reloaded-for', server); } catch { /* storage blocked: reload anyway, once per page */ }
+  window.location.reload();
+}
+
 async function call<T>(method: 'GET' | 'POST', url: string, body?: unknown): Promise<T> {
   const res = await fetch('/api' + url, {
     method, credentials: 'include',
     headers: { 'content-type': 'application/json', 'x-requested-with': 'class-legacy' },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
+  checkBuild(res.headers.get('x-build'));
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new ApiError(res.status, data.error ?? 'error', data.message ?? 'Something went wrong.');
   return data as T;

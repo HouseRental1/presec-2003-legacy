@@ -3,7 +3,7 @@ import cookie from '@fastify/cookie';
 import helmet from '@fastify/helmet';
 import rateLimit from '@fastify/rate-limit';
 import fastifyStatic from '@fastify/static';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { ZodError, z } from 'zod';
@@ -293,6 +293,9 @@ export async function buildApp() {
   // Serve the built web app (one deployable service). Unknown non-API paths fall back to index.html.
   const webDist = process.env.WEB_DIST ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'dist');
   if (existsSync(webDist)) {
+    // Build id = the hashed main script in index.html. API replies carry it so an open tab running an older build reloads itself.
+    const build = (readFileSync(join(webDist, 'index.html'), 'utf8').match(/\/assets\/index-[\w-]+\.js/) ?? [''])[0];
+    if (build) app.addHook('onSend', async (req, reply) => { if (req.url.startsWith('/api/')) reply.header('x-build', build); });
     await app.register(fastifyStatic, { root: webDist, wildcard: true, cacheControl: false, setHeaders: (res, path) => { res.setHeader('cache-control', path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache'); } });
     app.setNotFoundHandler((req, reply) => req.url.startsWith('/api/') ? reply.code(404).send({ error: 'not_found', message: 'No such endpoint.' })
       : /^\/assets\/|\.\w{2,5}$/.test(req.url.split('?')[0]) ? reply.code(404).type('text/plain').send('Not found') : reply.header('cache-control', 'no-cache').sendFile('index.html'));
