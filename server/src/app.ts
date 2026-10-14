@@ -104,6 +104,8 @@ export async function buildApp() {
   app.get('/api/standings', read(async (_a, req) => C.standings(pool, (req.query as any).asOf)));
   app.get('/api/rules', read(async () => C.ruleVersions(pool)));
   app.get('/api/houses', read((a) => C.houseOverview(pool, a)));
+  app.get('/api/houses/:id/members', read((a, req) => { const x = req.query as any; return C.houseMembers(pool, a, id(req), x.q ?? '', x.sort ?? 'name', Number(x.page ?? 0)); }));
+  app.post('/api/houses/amounts', write(C.AmountsVisibility, (db, a, b) => C.setAmountsVisibility(db, a, b)));
   app.post('/api/houses/:id', write(C.HouseProfile, (db, a, b, r) => C.updateHouse(db, a, id(r), b)));
   app.post('/api/houses/members', write(A.AddClassmateInput, (db, a, b) => A.addClassmate(db, a, b)));
   app.get('/api/captain/outreach', read((a) => C.captainOutreach(pool, a)));

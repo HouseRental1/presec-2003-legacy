@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { Actor, Db, q, one, need, audit, notify, conflict, invalid, today } from '../lib.js';
+import { Actor, Db, q, one, need, audit, notify, conflict, invalid, today, perms } from '../lib.js';
 
 /**
  * House standings, reproducible from verified payments and the published rule version.
@@ -95,13 +95,55 @@ export async function ruleVersions(db: Db | any) {
 void one;
 
 /* ───────── house profiles and rosters (always available, with or without a competition) */
+/** Who may see individual amounts on the Houses page: 'finance' (finance roles only) or 'members' (every signed-in classmate). */
+export async function amountsVisibility(db: Db | any): Promise<'finance' | 'members'> {
+  const [r] = await q<any>(db, `SELECT value FROM settings WHERE key='house_amounts'`);
+  return r?.value === 'members' ? 'members' : 'finance';
+}
+const seesAmounts = async (db: Db | any, actor: Actor) => perms(actor).has('fin.view') || (await amountsVisibility(db)) === 'members';
+
 export async function houseOverview(db: Db | any, actor: Actor) {
   need(actor, 'dir', 'view the houses');
-  return q(db, `SELECT h.id, h.name, h.about, h.motto,
+  // Money counts for the house the classmate belonged to on the day they paid (same rule as the competition).
+  const houses = await q<any>(db, `SELECT h.id, h.name, h.about, h.motto,
       (SELECT count(*)::int FROM house_memberships hm WHERE hm.house_id=h.id AND hm.valid_to IS NULL) members,
       (SELECT count(*)::int FROM house_memberships hm JOIN members m ON m.id=hm.member_id WHERE hm.house_id=h.id AND hm.valid_to IS NULL AND m.user_id IS NOT NULL) with_accounts,
-      (SELECT coalesce(json_agg(coalesce(m.full_name, u.display_name)), '[]') FROM house_captains c JOIN users u ON u.id=c.user_id LEFT JOIN members m ON m.user_id=u.id WHERE c.house_id=h.id) captains
-    FROM houses h ORDER BY h.id`);
+      (SELECT coalesce(json_agg(coalesce(m.full_name, u.display_name)), '[]') FROM house_captains c JOIN users u ON u.id=c.user_id LEFT JOIN members m ON m.user_id=u.id WHERE c.house_id=h.id) captains,
+      coalesce(pay.raised, 0)::bigint raised, coalesce(pay.contributors, 0)::int contributors, pay.last_paid
+    FROM houses h LEFT JOIN (
+      SELECT hm.house_id, sum(p.amount_ghs) raised, count(DISTINCT p.member_id) contributors, max(p.paid_on) last_paid
+      FROM payments p JOIN house_memberships hm ON hm.member_id=p.member_id AND hm.valid_from <= p.paid_on AND (hm.valid_to IS NULL OR hm.valid_to >= p.paid_on)
+      WHERE p.status='verified' AND p.category='member' GROUP BY hm.house_id) pay ON pay.house_id=h.id
+    ORDER BY h.id`);
+  const all = houses.reduce((n: number, h: any) => n + Number(h.raised), 0);
+  return { houses: houses.map((h: any) => ({ ...h, raised: Number(h.raised) })), totalRaised: all, amountsVisibleTo: await amountsVisibility(db), canSeeAmounts: await seesAmounts(db, actor) };
+}
+
+/** One house's classmates with what each has given (amounts only for those allowed to see them). */
+export async function houseMembers(db: Db | any, actor: Actor, houseId: string, search = '', sort = 'name', page = 0) {
+  need(actor, 'dir', 'view the houses');
+  const show = await seesAmounts(db, actor);
+  const order = sort === 'amount' && show ? 'given DESC, m.full_name' : sort === 'recent' ? 'last_paid DESC NULLS LAST, m.full_name' : 'm.full_name';
+  const where = `hm.house_id=$1 AND hm.valid_to IS NULL AND ($2 = '' OR (m.full_name || ' ' || m.member_no || ' ' || coalesce(m.city,'') || ' ' || coalesce(m.profession,'')) ILIKE '%' || $2 || '%')`;
+  const rows = await q<any>(db, `SELECT m.id, m.member_no, m.full_name, m.city, m.profession, m.verified_at IS NOT NULL verified,
+      coalesce(sum(p.amount_ghs), 0)::bigint given, count(p.id)::int payments, max(p.paid_on) last_paid
+    FROM members m JOIN house_memberships hm ON hm.member_id=m.id
+    LEFT JOIN payments p ON p.member_id=m.id AND p.status='verified' AND p.category='member'
+    WHERE ${where} GROUP BY m.id ORDER BY ${order} LIMIT 50 OFFSET $3`, [houseId, search, page * 50]);
+  const [{ n }] = await q<any>(db, `SELECT count(*)::int n FROM members m JOIN house_memberships hm ON hm.member_id=m.id WHERE ${where}`, [houseId, search]);
+  return {
+    total: n, amountsShown: show,
+    rows: rows.map((r: any) => ({ member_no: r.member_no, full_name: r.full_name, city: r.city, profession: r.profession, verified: r.verified,
+      contributed: r.payments > 0, payments: r.payments, last_paid: r.last_paid,
+      given: show || r.id === actor.memberId ? Number(r.given) : null })),
+  };
+}
+
+export const AmountsVisibility = z.object({ visibleTo: z.enum(['finance', 'members']) });
+export async function setAmountsVisibility(db: Db, actor: Actor, input: z.infer<typeof AmountsVisibility>) {
+  need(actor, 'admin.members', 'change who sees individual amounts');
+  await db.query(`INSERT INTO settings (key, value) VALUES ('house_amounts', $1) ON CONFLICT (key) DO UPDATE SET value=EXCLUDED.value`, [JSON.stringify(input.visibleTo)]);
+  await audit(db, actor, 'Changed who sees individual contributions', 'house_amounts', input.visibleTo);
 }
 export const HouseProfile = z.object({ about: z.string().max(2000).optional(), motto: z.string().max(200).optional() });
 export async function updateHouse(db: Db, actor: Actor, id: string, input: z.infer<typeof HouseProfile>) {
