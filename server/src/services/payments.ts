@@ -341,3 +341,32 @@ export async function recentPayments(db: Db | any, actor: Actor, limit = 50) {
     LEFT JOIN users rb ON rb.id=p.recorded_by LEFT JOIN users vb ON vb.id=p.verified_by
     ORDER BY p.created_at DESC LIMIT $1`, [Math.min(200, Math.max(1, limit))]);
 }
+
+/* ───────── all payments register (admins): every payment with timestamps, filters and paging */
+export async function allPayments(db: Db | any, actor: Actor, f: { q?: string; status?: string; source?: string; from?: string; to?: string; page?: number }) {
+  need(actor, 'fin.view', 'view payments');
+  const where = [`($1 = '' OR (coalesce(m.full_name,'') || ' ' || coalesce(m.member_no,'') || ' ' || coalesce(p.payer_name,'') || ' ' || p.external_ref || ' ' || coalesce(p.receipt_no,'')) ILIKE '%' || $1 || '%')`,
+    `($2 = '' OR p.status = $2)`, `($3 = '' OR p.source = $3)`, `($4 = '' OR p.paid_on >= $4::date)`, `($5 = '' OR p.paid_on <= $5::date)`].join(' AND ');
+  const args = [f.q ?? '', f.status ?? '', f.source ?? '', f.from ?? '', f.to ?? ''];
+  const rows = await q(db, `SELECT p.id, p.paid_on, p.created_at, p.verified_at, p.amount_ghs, p.channel, p.network, p.source, p.status, p.category, p.external_ref, p.receipt_no, p.payer_name,
+      p.evidence_note, p.exception_reason, p.reversal_reason, p.recorded_by, m.member_no, m.full_name, hm.house_id, rb.display_name recorded_by_name, vb.display_name verified_by_name
+    FROM payments p LEFT JOIN members m ON m.id=p.member_id
+    LEFT JOIN house_memberships hm ON hm.member_id=m.id AND hm.valid_to IS NULL
+    LEFT JOIN users rb ON rb.id=p.recorded_by LEFT JOIN users vb ON vb.id=p.verified_by
+    WHERE ${where} ORDER BY p.created_at DESC LIMIT 50 OFFSET $6`, [...args, (f.page ?? 0) * 50]);
+  const [t] = await q<any>(db, `SELECT count(*)::int n, coalesce(sum(p.amount_ghs) FILTER (WHERE p.status='verified'),0)::bigint verified FROM payments p LEFT JOIN members m ON m.id=p.member_id WHERE ${where}`, args);
+  return { rows, total: t.n, verifiedTotal: Number(t.verified) };
+}
+
+/** Delete a payment that was never verified (a typo, a duplicate, a test). Verified payments are reversed instead. */
+export async function deletePayment(db: Db, actor: Actor, id: string, reason: string) {
+  need(actor, 'fin.record', 'delete payments');
+  const p = await lock(db, id);
+  const isSuper = actor.roles.includes('superadmin');
+  if (!['pending', 'exception', 'rejected'].includes(p.status)) throw conflict(p.status === 'verified' ? 'This payment is verified and counted in the totals. Use “Reverse” instead, so the books stay correct.' : `A ${p.status.replace('_', ' ')} payment cannot be deleted.`);
+  if (p.source === 'gateway' && p.status === 'pending') throw conflict('This Paystack payment is still being confirmed by Paystack. Wait for it to finish.');
+  if (!isSuper && p.recorded_by !== actor.userId) throw forbid('Only the person who recorded this payment, or a super admin, can delete it.');
+  const m = p.member_id ? (await q<any>(db, 'SELECT member_no, full_name FROM members WHERE id=$1', [p.member_id]))[0] : null;
+  await db.query('DELETE FROM payments WHERE id=$1', [id]);
+  await audit(db, actor, 'Deleted payment', id, `${fmt(p.amount_ghs)} · ${p.external_ref} · ${m ? m.full_name + ' ' + m.member_no : p.payer_name ?? 'unmatched'} · paid ${p.paid_on} · ${reason}`);
+}

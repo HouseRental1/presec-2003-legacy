@@ -160,3 +160,25 @@ describe('classmate pages: view, edit, remove', () => {
     expect((await post(`/api/people/${(await get('/api/me', A)).json().member?.member_no ?? 'X'}/remove`, { reason: 'self' }, A)).statusCode).not.toBe(200);
   });
 });
+
+describe('all payments register and deleting recorded payments', () => {
+  it('lists payments with timestamps; deletes unverified ones, refuses verified ones', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const r1 = await post('/api/finance/payments', { memberNo: 'P03-0001', amountGhs: 75, channel: 'cash', ref: 'DEL-ME-1', paidOn: today }, A);
+    expect(r1.statusCode, r1.body).toBe(200);
+    const list = (await get('/api/finance/all?q=DEL-ME', A)).json();
+    expect(list.total).toBe(1);
+    expect(list.rows[0]).toMatchObject({ external_ref: 'DEL-ME-1', status: 'pending', recorded_by_name: expect.any(String) });
+    expect(list.rows[0].created_at).toMatch(/T\d\d:\d\d/);
+    const K = await login('kofi.b@example.org').catch(() => null);
+    void K;
+    expect((await post(`/api/finance/payments/${r1.json().id}/delete`, { reason: 'x' }, A)).statusCode).toBe(400);   // reason too short
+    expect((await post(`/api/finance/payments/${r1.json().id}/delete`, { reason: 'Typed the wrong amount' }, A)).statusCode).toBe(200);
+    expect((await get('/api/finance/all?q=DEL-ME', A)).json().total).toBe(0);
+    const verified = (await get('/api/finance/all?status=verified', A)).json().rows[0];
+    const d = await post(`/api/finance/payments/${verified.id}/delete`, { reason: 'Trying to delete' }, A);
+    expect(d.statusCode).toBe(409); expect(d.json().message).toMatch(/Reverse/);
+    const members = await get('/api/finance/all', { authorization: 'Bearer ' + (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'ama.test@example.org', password: 'member-password-1' } })).json().token });
+    expect(members.statusCode).toBe(403);
+  });
+});

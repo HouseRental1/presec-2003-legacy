@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, ghs, date, today, HOUSE_NAME } from '../api';
 import { Gate, PersonLink, Pill, STATUS, Tile, useAction, useLoad, useSession, useToast } from '../ui';
@@ -6,12 +6,12 @@ import { useDialog, uploadFile, MemberPicker } from '../forms';
 
 export default function Money() {
   const { can } = useSession();
-  const tabs = ([['overview', 'Overview', can('fin.view')], ['mine', can('fin.view') ? 'My payments' : 'Pay & statement', can('own')], ['verify', 'Verification', can('fin.view')], ['payout', 'Payments out', can('fin.view') || can('req.create') || can('req.approve')], ['ledger', 'Ledger & reports', can('fin.view')]] as const).filter((t) => t[2]);
+  const tabs = ([['overview', 'Overview', can('fin.view')], ['mine', can('fin.view') ? 'My payments' : 'Pay & statement', can('own')], ['all', 'All payments', can('fin.view')], ['verify', 'Verification', can('fin.view')], ['payout', 'Payments out', can('fin.view') || can('req.create') || can('req.approve')], ['ledger', 'Ledger & reports', can('fin.view')]] as const).filter((t) => t[2]);
   const [tab, setTab] = useState<string>(tabs[0]?.[0] ?? 'mine');
   if (!tabs.length) return <div className="callout warn">Money is available to members and finance roles.</div>;
   return <div className="stack"><div><div className="eyebrow">Actual cash in and out · promises are on the Pledges page</div><h1>{can('fin.view') ? 'Money' : 'My giving'}</h1></div>
     {tabs.length > 1 && <div className="tabs" role="tablist">{tabs.map(([k, l]) => <button key={k} role="tab" aria-selected={tab === k} onClick={() => setTab(k)}>{l}</button>)}</div>}
-    {tab === 'overview' && <Overview />}{tab === 'mine' && <Mine />}{tab === 'verify' && <Verify />}{tab === 'payout' && <Payout />}{tab === 'ledger' && <Ledger />}</div>;
+    {tab === 'overview' && <Overview />}{tab === 'all' && <AllPayments />}{tab === 'mine' && <Mine />}{tab === 'verify' && <Verify />}{tab === 'payout' && <Payout />}{tab === 'ledger' && <Ledger />}</div>;
 }
 
 function Mine() {
@@ -165,6 +165,72 @@ function Overview() {
             <td><Pill k={STATUS[p.status]?.[1] ?? ''}>{STATUS[p.status]?.[0] ?? p.status}</Pill></td>
             <td className="hide-sm small">{p.source === 'gateway' ? 'Automatic' : p.verified_by_name ?? '—'}{p.recorded_by_name && <div className="def">recorded by {p.recorded_by_name}</div>}</td>
             <td className="r num">{ghs(p.amount_ghs, 2)}</td></tr>)}</tbody></table></div>}</Gate>
+    </div>
+  </div>;
+}
+
+const when = (iso?: string | null) => iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+const HOW: Record<string, string> = { gateway: 'Paystack', self: 'Reported transfer', manual: 'Recorded', import: 'Imported' };
+
+/** Every payment ever recorded, newest first, with timestamps. Unverified ones can be deleted; verified ones reversed. */
+function AllPayments() {
+  const { can, me } = useSession(); const toast = useToast(); const [dialog, open] = useDialog();
+  const [f, setF] = useState({ q: '', status: '', source: '', from: '', to: '' }), [page, setPage] = useState(0), [rk, setRk] = useState(0);
+  const [d, setD] = useState<any>(null), [err, setErr] = useState<any>(null);
+  useEffect(() => {
+    let stop = false;
+    const qs = new URLSearchParams({ ...f, page: String(page) }).toString();
+    const t = setTimeout(() => api.get<any>('/finance/all?' + qs).then((r) => { if (!stop) { setD(r); setErr(null); } }).catch((e) => !stop && setErr(e)), f.q ? 250 : 0);
+    return () => { stop = true; clearTimeout(t); };
+  }, [f, page, rk]);
+  const set = (k: string) => (e: any) => { setF({ ...f, [k]: e.target.value }); setPage(0); };
+  const reload = () => setRk((k) => k + 1);
+  const isSuper = can('super.manage');
+  const del = (p: any) => open({ title: 'Delete this payment?', submit: 'Delete payment',
+    intro: <div className="callout warn small">{ghs(p.amount_ghs, 2)} from {p.full_name ?? p.payer_name ?? 'an unmatched payer'}, ref {p.external_ref}. It was never verified, so it has not been counted in any totals. The deletion is kept in the audit trail.</div>,
+    fields: [{ name: 'reason', label: 'Reason', required: true, hint: 'For example: duplicate entry, wrong amount, test.' }],
+    onSubmit: async (v) => { await api.post(`/finance/payments/${p.id}/delete`, v); toast('Payment deleted.'); reload(); } });
+  const reverse = (p: any) => open({ title: 'Reverse this payment?', submit: 'Request reversal',
+    intro: <div className="callout warn small">{ghs(p.amount_ghs, 2)} from {p.full_name ?? p.payer_name}. It is verified and counted, so it cannot be deleted. A reversal takes it back out of the totals with a clear record, once a different super admin confirms.</div>,
+    fields: [{ name: 'reason', label: 'Reason', required: true }],
+    onSubmit: async (v) => { await api.post(`/finance/payments/${p.id}/reversal-request`, v); toast('Reversal requested. A super admin will confirm it.'); reload(); } });
+  const csv = () => {
+    const head = ['Recorded at', 'Paid on', 'Member no', 'Name', 'House', 'How', 'Channel', 'Reference', 'Receipt', 'Status', 'Recorded by', 'Verified by', 'Verified at', 'Amount (GHS)'];
+    const esc = (x: any) => `"${String(x ?? '').replace(/"/g, '""')}"`;
+    const lines = [head.join(',')].concat(d.rows.map((p: any) => [when(p.created_at), p.paid_on?.slice(0, 10), p.member_no, p.full_name ?? p.payer_name, HOUSE_NAME[p.house_id] ?? '', HOW[p.source] ?? p.source, p.network ?? p.channel, p.external_ref, p.receipt_no, STATUS[p.status]?.[0] ?? p.status, p.recorded_by_name, p.verified_by_name, when(p.verified_at), (p.amount_ghs / 100).toFixed(2)].map(esc).join(',')));
+    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' })); a.download = `payments-page-${page + 1}.csv`; a.click();
+  };
+  return <div className="stack">{dialog}
+    <div className="card stack">
+      <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <input aria-label="Search" placeholder="Name, number, reference or receipt" value={f.q} onChange={set('q')} style={{ maxWidth: 260 }} />
+        <select aria-label="Status" value={f.status} onChange={set('status')} style={{ width: 'auto' }}><option value="">Any status</option>{['pending', 'verified', 'exception', 'reversal_requested', 'reversed', 'rejected'].map((k) => <option key={k} value={k}>{STATUS[k]?.[0] ?? k}</option>)}</select>
+        <select aria-label="How" value={f.source} onChange={set('source')} style={{ width: 'auto' }}><option value="">Any source</option>{Object.entries(HOW).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
+        <label className="row small" style={{ gap: 6 }}>Paid from<input type="date" value={f.from} onChange={set('from')} style={{ width: 'auto' }} /></label>
+        <label className="row small" style={{ gap: 6 }}>to<input type="date" value={f.to} onChange={set('to')} style={{ width: 'auto' }} /></label>
+        {d && <button className="btn sm" onClick={csv}>Download CSV</button>}
+      </div>
+      {d && <p className="small muted" style={{ margin: 0 }}>{d.total} payment{d.total === 1 ? '' : 's'} · {ghs(d.verifiedTotal, 2)} verified in this selection</p>}
+    </div>
+    <div className="card">
+      {err ? <Gate error={err}>{null}</Gate> : !d ? <p className="muted">Loading…</p> : !d.rows.length ? <p className="muted small" style={{ margin: 0 }}>No payments match.</p> :
+        <div className="tablewrap"><table><thead><tr><th>Recorded</th><th>From</th><th className="hide-sm">How · reference</th><th>Status</th><th className="hide-sm">Who</th><th className="r">Amount</th><th /></tr></thead><tbody>
+          {d.rows.map((p: any) => { const deletable = ['pending', 'exception', 'rejected'].includes(p.status) && !(p.source === 'gateway' && p.status === 'pending') && (isSuper || p.recorded_by === me?.userId);
+            return <tr key={p.id}>
+              <td style={{ whiteSpace: 'nowrap' }}>{when(p.created_at)}<div className="def">paid {date(p.paid_on)}</div></td>
+              <td>{p.full_name ? <PersonLink no={p.member_no} name={p.full_name} /> : p.payer_name ?? 'Unmatched'}<div className="def">{p.member_no ?? ''}{p.house_id ? ' · ' + HOUSE_NAME[p.house_id] : ''}{p.category === 'donor' ? ' · friend of the school' : ''}</div></td>
+              <td className="hide-sm">{HOW[p.source] ?? p.source} · {p.network ?? p.channel}<div className="def mono">{p.external_ref}{p.receipt_no ? ' · ' + p.receipt_no : ''}</div></td>
+              <td><Pill k={STATUS[p.status]?.[1] ?? ''}>{STATUS[p.status]?.[0] ?? p.status}</Pill>{(p.exception_reason || p.reversal_reason) && <div className="def">{p.exception_reason ?? p.reversal_reason}</div>}</td>
+              <td className="hide-sm small">{p.recorded_by_name ? <>Recorded by {p.recorded_by_name}</> : p.source === 'gateway' ? 'Paystack' : '—'}{p.verified_at && <div className="def">Verified {p.verified_by_name ? 'by ' + p.verified_by_name + ', ' : ''}{when(p.verified_at)}</div>}</td>
+              <td className="r num">{ghs(p.amount_ghs, 2)}</td>
+              <td><div className="row" style={{ flexWrap: 'nowrap' }}>
+                {deletable && <button className="btn sm danger" onClick={() => del(p)}>Delete</button>}
+                {p.status === 'verified' && can('fin.record') && <button className="btn sm" onClick={() => reverse(p)}>Reverse</button>}
+                {p.status === 'reversal_requested' && can('fin.verify') && <><button className="btn sm primary" onClick={async () => { try { await api.post(`/finance/payments/${p.id}/reversal-confirm`); toast('Reversal confirmed.'); reload(); } catch (e) { toast((e as Error).message, true); } }}>Confirm reversal</button>
+                  <button className="btn sm" onClick={async () => { try { await api.post(`/finance/payments/${p.id}/reversal-decline`); toast('Reversal declined.'); reload(); } catch (e) { toast((e as Error).message, true); } }}>Decline</button></>}
+              </div></td></tr>; })}
+        </tbody></table></div>}
+      {d && d.total > 50 && <div className="row" style={{ justifyContent: 'space-between', marginTop: 10 }}><button className="btn sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Newer</button><span className="small muted">Page {page + 1} of {Math.ceil(d.total / 50)}</span><button className="btn sm" disabled={(page + 1) * 50 >= d.total} onClick={() => setPage(page + 1)}>Older</button></div>}
     </div>
   </div>;
 }
