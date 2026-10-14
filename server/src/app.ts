@@ -199,6 +199,10 @@ export async function buildApp() {
     const b = FR.FirstAdminInput.parse(req.body);
     return tx((db) => FR.createFirstAdmin(db, b, b.code));
   });
+  app.post('/api/setup/recover-admin', { config: { rateLimit: { max: 5, timeWindow: '1 minute' } } }, async (req) => {
+    const b = FR.FirstAdminInput.parse(req.body);
+    return tx((db) => FR.recoverFirstAdmin(db, b));
+  });
 
   /* accounts */
   const limited = { config: { rateLimit: { max: config.loginRateMax, timeWindow: '1 minute' } } };
@@ -275,9 +279,9 @@ export async function buildApp() {
   // Serve the built web app (one deployable service). Unknown non-API paths fall back to index.html.
   const webDist = process.env.WEB_DIST ?? join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'web', 'dist');
   if (existsSync(webDist)) {
-    await app.register(fastifyStatic, { root: webDist, wildcard: true, setHeaders: (res, path) => { if (path.includes('/assets/')) res.setHeader('cache-control', 'public, max-age=31536000, immutable'); } });
+    await app.register(fastifyStatic, { root: webDist, wildcard: true, cacheControl: false, setHeaders: (res, path) => { res.setHeader('cache-control', path.includes('/assets/') ? 'public, max-age=31536000, immutable' : 'no-cache'); } });
     app.setNotFoundHandler((req, reply) => req.url.startsWith('/api/') ? reply.code(404).send({ error: 'not_found', message: 'No such endpoint.' })
-      : /^\/assets\/|\.\w{2,5}$/.test(req.url.split('?')[0]) ? reply.code(404).type('text/plain').send('Not found') : reply.sendFile('index.html'));
+      : /^\/assets\/|\.\w{2,5}$/.test(req.url.split('?')[0]) ? reply.code(404).type('text/plain').send('Not found') : reply.header('cache-control', 'no-cache').sendFile('index.html'));
   }
   return app;
 }

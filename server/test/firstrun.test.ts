@@ -30,3 +30,17 @@ describe('first-run set-up from the sign-in page', () => {
     expect(me.json().roles).toEqual(['admin']);
   });
 });
+
+describe('set-up recovery (single account only)', () => {
+  it('resets the only account with the set-up code, then closes once a second account exists', async () => {
+    expect((await app.inject({ method: 'GET', url: '/api/setup/status' })).json().canRecover).toBe(true);
+    const bad = await app.inject({ method: 'POST', url: '/api/setup/recover-admin', payload: { name: 'Kweku', email: 'kweku@example.org', password: 'another-long-pass', code: 'wrong' } });
+    expect(bad.statusCode).toBe(403);
+    const ok = await app.inject({ method: 'POST', url: '/api/setup/recover-admin', payload: { name: 'Kweku Yeboah', email: 'kwekuyeboah@gmail.com', password: 'another-long-pass', code: 'setup-test-code' } });
+    expect(ok.statusCode, ok.body).toBe(200);
+    expect((await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'kwekuyeboah@gmail.com', password: 'another-long-pass' } })).statusCode).toBe(200);
+    await pool.query(`INSERT INTO users (email, password_hash, display_name) VALUES ('second@example.org','x','Second')`);
+    const closed = await app.inject({ method: 'POST', url: '/api/setup/recover-admin', payload: { name: 'Intruder', email: 'x@example.org', password: 'another-long-pass', code: 'setup-test-code' } });
+    expect(closed.statusCode).toBe(409);
+  });
+});
