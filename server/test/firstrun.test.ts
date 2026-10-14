@@ -27,7 +27,7 @@ describe('first-run set-up from the sign-in page', () => {
     const login = await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'kweku@example.org', password: 'a-long-enough-pass' } });
     expect(login.statusCode).toBe(200);
     const me = await app.inject({ method: 'GET', url: '/api/me', headers: { authorization: 'Bearer ' + login.json().token } });
-    expect(me.json().roles.sort()).toEqual(['admin', 'committee']);
+    expect(me.json().roles.sort()).toEqual(['admin', 'committee', 'pm']);
     expect((await app.inject({ method: 'GET', url: '/api/project', headers: { authorization: 'Bearer ' + login.json().token } })).statusCode).toBe(200);
   });
 });

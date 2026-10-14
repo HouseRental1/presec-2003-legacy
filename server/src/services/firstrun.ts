@@ -48,7 +48,7 @@ export async function recoverFirstAdmin(db: Db, input: z.infer<typeof FirstAdmin
   if (users.length !== 1) throw new AppError(409, 'recovery_closed', 'Recovery is only available while the platform has a single account. Use “Forgot password?” instead.');
   const id = users[0].id;
   await db.query(`UPDATE users SET email=lower($2), password_hash=$3, display_name=$4, status='active', totp_secret=NULL WHERE id=$1`, [id, input.email.trim(), await hashPassword(input.password), input.name.trim()]);
-  await db.query(`INSERT INTO user_roles (user_id, role) VALUES ($1,'admin'),($1,'committee') ON CONFLICT DO NOTHING`, [id]);
+  await db.query(`INSERT INTO user_roles (user_id, role) VALUES ($1,'admin'),($1,'committee'),($1,'pm') ON CONFLICT DO NOTHING`, [id]);
   await db.query('DELETE FROM sessions WHERE user_id=$1', [id]);
   await db.query('DELETE FROM login_failures');
   await audit(db, null, 'Reset the set-up administrator', input.email.trim().toLowerCase());
@@ -73,7 +73,7 @@ export async function createFirstAdmin(db: Db, input: { name: string; email: str
   await db.query(`INSERT INTO projects VALUES ('P1',$1,'initiation') ON CONFLICT DO NOTHING`, [input.projectName ?? DEFAULT_PROJECT]);
   const [u] = await q<any>(db, 'INSERT INTO users (email, password_hash, display_name) VALUES (lower($1),$2,$3) RETURNING id', [input.email.trim(), await hashPassword(input.password), input.name.trim()]);
   // The founder also sits on the executive committee so set-up can proceed before others join.
-  await db.query(`INSERT INTO user_roles (user_id, role) VALUES ($1,'admin'),($1,'committee')`, [u.id]);
+  await db.query(`INSERT INTO user_roles (user_id, role) VALUES ($1,'admin'),($1,'committee'),($1,'pm')`, [u.id]);
   await audit(db, null, 'Created first administrator', input.email.trim().toLowerCase());
   return { ok: true, email: input.email.trim().toLowerCase() };
 }
