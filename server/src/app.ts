@@ -155,7 +155,9 @@ export async function buildApp() {
   }
 
   /* finance desk */
-  app.get('/api/finance/all', read((a, req) => { const x = req.query as any; return P.allPayments(pool, a, { q: x.q, status: x.status, source: x.source, from: x.from, to: x.to, page: Number(x.page ?? 0) }); }));
+  app.get('/api/finance/all', read((a, req) => { const x = req.query as any; return P.allPayments(pool, a, { q: x.q, status: x.status, source: x.source, from: x.from, to: x.to, page: Number(x.page ?? 0), all: x.all === '1' }); }));
+  app.get('/api/finance/payments/:id/history', read((a, req) => P.paymentHistory(pool, a, id(req))));
+  app.post('/api/finance/payments/:id/edit', write(P.PaymentEdit, (db, a, b, r) => P.editPayment(db, a, id(r), b)));
   app.post('/api/finance/payments/:id/delete', write(z.object({ reason: z.string().trim().min(3, 'Give a short reason, for the record.') }), (db, a, b, r) => P.deletePayment(db, a, id(r), b.reason)));
   app.get('/api/finance/recent', read((a, req) => P.recentPayments(pool, a, Number((req.query as any).limit ?? 50))));
   app.get('/api/finance/queues', read((a) => P.queues(pool, a)));

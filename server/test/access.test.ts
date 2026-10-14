@@ -182,3 +182,22 @@ describe('all payments register and deleting recorded payments', () => {
     expect(members.statusCode).toBe(403);
   });
 });
+
+describe('payment history, corrections and attention counts', () => {
+  it('corrects an unverified payment, shows its history, counts what needs attention', async () => {
+    const today = new Date().toISOString().slice(0, 10);
+    const r = await post('/api/finance/payments', { memberNo: 'P03-0001', amountGhs: 40, channel: 'cash', ref: 'FIX-ME-1', paidOn: today }, A);
+    const id = r.json().id;
+    const before = (await get('/api/finance/all', A)).json().counts.pending ?? 0;
+    expect(before).toBeGreaterThan(0);
+    const e = await post(`/api/finance/payments/${id}/edit`, { amountGhs: 400, ref: 'FIX-ME-1B', paidOn: today, reason: 'Missed a zero' }, A);
+    expect(e.statusCode, e.body).toBe(200); expect(e.json().changed.join(' ')).toMatch(/amount .* → GH₵\s?400/);
+    const h = (await get(`/api/finance/payments/${id}/history`, A)).json();
+    expect(h.map((x: any) => x.action)).toEqual(['Recorded manual payment', 'Corrected payment']);
+    expect(h[1].detail).toMatch(/Missed a zero/);
+    const all = (await get('/api/finance/all?all=1', A)).json();
+    expect(all.rows.length).toBe(all.total);
+    const v = (await get('/api/finance/all?status=verified', A)).json().rows[0];
+    expect((await post(`/api/finance/payments/${v.id}/edit`, { amountGhs: 1, ref: 'XXX', paidOn: today, reason: 'try' }, A)).statusCode).toBe(409);
+  });
+});

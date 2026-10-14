@@ -343,7 +343,7 @@ export async function recentPayments(db: Db | any, actor: Actor, limit = 50) {
 }
 
 /* ───────── all payments register (admins): every payment with timestamps, filters and paging */
-export async function allPayments(db: Db | any, actor: Actor, f: { q?: string; status?: string; source?: string; from?: string; to?: string; page?: number }) {
+export async function allPayments(db: Db | any, actor: Actor, f: { q?: string; status?: string; source?: string; from?: string; to?: string; page?: number; all?: boolean }) {
   need(actor, 'fin.view', 'view payments');
   const where = [`($1 = '' OR (coalesce(m.full_name,'') || ' ' || coalesce(m.member_no,'') || ' ' || coalesce(p.payer_name,'') || ' ' || p.external_ref || ' ' || coalesce(p.receipt_no,'')) ILIKE '%' || $1 || '%')`,
     `($2 = '' OR p.status = $2)`, `($3 = '' OR p.source = $3)`, `($4 = '' OR p.paid_on >= $4::date)`, `($5 = '' OR p.paid_on <= $5::date)`].join(' AND ');
@@ -353,9 +353,11 @@ export async function allPayments(db: Db | any, actor: Actor, f: { q?: string; s
     FROM payments p LEFT JOIN members m ON m.id=p.member_id
     LEFT JOIN house_memberships hm ON hm.member_id=m.id AND hm.valid_to IS NULL
     LEFT JOIN users rb ON rb.id=p.recorded_by LEFT JOIN users vb ON vb.id=p.verified_by
-    WHERE ${where} ORDER BY p.created_at DESC LIMIT 50 OFFSET $6`, [...args, (f.page ?? 0) * 50]);
+    WHERE ${where} ORDER BY p.created_at DESC LIMIT $7 OFFSET $6`, [...args, f.all ? 0 : (f.page ?? 0) * 50, f.all ? 10000 : 50]);
   const [t] = await q<any>(db, `SELECT count(*)::int n, coalesce(sum(p.amount_ghs) FILTER (WHERE p.status='verified'),0)::bigint verified FROM payments p LEFT JOIN members m ON m.id=p.member_id WHERE ${where}`, args);
-  return { rows, total: t.n, verifiedTotal: Number(t.verified) };
+  // What needs a person's attention, across all payments (not just this filter).
+  const counts = Object.fromEntries((await q<any>(db, `SELECT status, count(*)::int n FROM payments WHERE status IN ('pending','exception','reversal_requested') AND NOT (source='gateway' AND status='pending') GROUP BY status`)).map((r) => [r.status, r.n]));
+  return { rows, total: t.n, verifiedTotal: Number(t.verified), counts };
 }
 
 /** Delete a payment that was never verified (a typo, a duplicate, a test). Verified payments are reversed instead. */
@@ -369,4 +371,36 @@ export async function deletePayment(db: Db, actor: Actor, id: string, reason: st
   const m = p.member_id ? (await q<any>(db, 'SELECT member_no, full_name FROM members WHERE id=$1', [p.member_id]))[0] : null;
   await db.query('DELETE FROM payments WHERE id=$1', [id]);
   await audit(db, actor, 'Deleted payment', id, `${fmt(p.amount_ghs)} · ${p.external_ref} · ${m ? m.full_name + ' ' + m.member_no : p.payer_name ?? 'unmatched'} · paid ${p.paid_on} · ${reason}`);
+}
+
+/** Everything that happened to one payment, from the audit trail, oldest first. */
+export async function paymentHistory(db: Db | any, actor: Actor, id: string) {
+  need(actor, 'fin.view', 'view payments');
+  return q(db, `SELECT at, actor_label, action, detail FROM audit_events WHERE target=$1 ORDER BY seq`, [id]);
+}
+
+/** Correct a payment that is not verified yet (wrong amount, reference, date or classmate). */
+export const PaymentEdit = z.object({ memberNo: z.string().optional(), amountGhs: z.number().positive().max(10_000_000), ref: z.string().trim().min(3).max(80), paidOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), channel: z.enum(['bank', 'cash']).optional(), reason: z.string().trim().min(3, 'Say what you corrected and why.') });
+export async function editPayment(db: Db, actor: Actor, id: string, input: z.infer<typeof PaymentEdit>) {
+  need(actor, 'fin.record', 'correct payments');
+  const p = await lock(db, id);
+  if (!['pending', 'exception'].includes(p.status)) throw conflict(p.status === 'verified' ? 'Verified payments cannot be changed. Reverse it and record it again correctly.' : `A ${p.status.replace('_', ' ')} payment cannot be changed.`);
+  if (p.source === 'gateway') throw conflict('Paystack payments come from Paystack and cannot be edited.');
+  if (!actor.roles.includes('superadmin') && p.recorded_by !== actor.userId) throw forbid('Only the person who recorded this payment, or a super admin, can correct it.');
+  const amount = Math.round(input.amountGhs * 100);
+  const m = input.memberNo ? await memberByNo(db, input.memberNo) : null;
+  const memberId = m ? m.id : p.member_id;
+  const changes: string[] = [];
+  if (amount !== Number(p.amount_ghs)) changes.push(`amount ${fmt(p.amount_ghs)} → ${fmt(amount)}`);
+  if (input.ref !== p.external_ref) changes.push(`reference ${p.external_ref} → ${input.ref}`);
+  if (input.paidOn !== String(p.paid_on).slice(0, 10) && input.paidOn !== new Date(p.paid_on as any).toISOString().slice(0, 10)) changes.push(`paid on → ${input.paidOn}`);
+  if (memberId !== p.member_id) changes.push(`classmate → ${input.memberNo}`);
+  if (input.channel && input.channel !== p.channel) changes.push(`channel ${p.channel} → ${input.channel}`);
+  try {
+    await db.query(`UPDATE payments SET amount_ghs=$2, amount_original=$2, external_ref=$3, paid_on=$4, member_id=$5, channel=coalesce($6, channel),
+      status=CASE WHEN status='exception' AND $5::uuid IS NOT NULL THEN 'pending' ELSE status END, exception_reason=CASE WHEN status='exception' AND $5::uuid IS NOT NULL THEN NULL ELSE exception_reason END WHERE id=$1`,
+      [id, amount, input.ref, input.paidOn, memberId, input.channel ?? null]);
+  } catch (e: any) { if (e.code === '23505') throw conflict(`Reference ${input.ref} is already recorded.`); throw e; }
+  await audit(db, actor, 'Corrected payment', id, `${changes.join('; ') || 'no change'} · ${input.reason}`);
+  return { changed: changes };
 }

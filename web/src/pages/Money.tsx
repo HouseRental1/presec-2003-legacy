@@ -172,11 +172,11 @@ function Overview() {
 const when = (iso?: string | null) => iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
 const HOW: Record<string, string> = { gateway: 'Paystack', self: 'Reported transfer', manual: 'Recorded', import: 'Imported' };
 
-/** Every payment ever recorded, newest first, with timestamps. Unverified ones can be deleted; verified ones reversed. */
+/** Every payment ever recorded, newest first, with timestamps. Click one for its full story and the actions it allows. */
 function AllPayments() {
-  const { can, me } = useSession(); const toast = useToast(); const [dialog, open] = useDialog();
   const [f, setF] = useState({ q: '', status: '', source: '', from: '', to: '' }), [page, setPage] = useState(0), [rk, setRk] = useState(0);
-  const [d, setD] = useState<any>(null), [err, setErr] = useState<any>(null);
+  const [d, setD] = useState<any>(null), [err, setErr] = useState<any>(null), [sel, setSel] = useState<any>(null), [busy, setBusy] = useState(false);
+  const toast = useToast();
   useEffect(() => {
     let stop = false;
     const qs = new URLSearchParams({ ...f, page: String(page) }).toString();
@@ -185,22 +185,21 @@ function AllPayments() {
   }, [f, page, rk]);
   const set = (k: string) => (e: any) => { setF({ ...f, [k]: e.target.value }); setPage(0); };
   const reload = () => setRk((k) => k + 1);
-  const isSuper = can('super.manage');
-  const del = (p: any) => open({ title: 'Delete this payment?', submit: 'Delete payment',
-    intro: <div className="callout warn small">{ghs(p.amount_ghs, 2)} from {p.full_name ?? p.payer_name ?? 'an unmatched payer'}, ref {p.external_ref}. It was never verified, so it has not been counted in any totals. The deletion is kept in the audit trail.</div>,
-    fields: [{ name: 'reason', label: 'Reason', required: true, hint: 'For example: duplicate entry, wrong amount, test.' }],
-    onSubmit: async (v) => { await api.post(`/finance/payments/${p.id}/delete`, v); toast('Payment deleted.'); reload(); } });
-  const reverse = (p: any) => open({ title: 'Reverse this payment?', submit: 'Request reversal',
-    intro: <div className="callout warn small">{ghs(p.amount_ghs, 2)} from {p.full_name ?? p.payer_name}. It is verified and counted, so it cannot be deleted. A reversal takes it back out of the totals with a clear record, once a different super admin confirms.</div>,
-    fields: [{ name: 'reason', label: 'Reason', required: true }],
-    onSubmit: async (v) => { await api.post(`/finance/payments/${p.id}/reversal-request`, v); toast('Reversal requested. A super admin will confirm it.'); reload(); } });
-  const csv = () => {
-    const head = ['Recorded at', 'Paid on', 'Member no', 'Name', 'House', 'How', 'Channel', 'Reference', 'Receipt', 'Status', 'Recorded by', 'Verified by', 'Verified at', 'Amount (GHS)'];
-    const esc = (x: any) => `"${String(x ?? '').replace(/"/g, '""')}"`;
-    const lines = [head.join(',')].concat(d.rows.map((p: any) => [when(p.created_at), p.paid_on?.slice(0, 10), p.member_no, p.full_name ?? p.payer_name, HOUSE_NAME[p.house_id] ?? '', HOW[p.source] ?? p.source, p.network ?? p.channel, p.external_ref, p.receipt_no, STATUS[p.status]?.[0] ?? p.status, p.recorded_by_name, p.verified_by_name, when(p.verified_at), (p.amount_ghs / 100).toFixed(2)].map(esc).join(',')));
-    const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' })); a.download = `payments-page-${page + 1}.csv`; a.click();
+  const csv = async () => {
+    setBusy(true);
+    try {
+      const all = await api.get<any>('/finance/all?' + new URLSearchParams({ ...f, all: '1' }).toString());
+      const head = ['Recorded at', 'Paid on', 'Member no', 'Name', 'House', 'How', 'Channel', 'Reference', 'Receipt', 'Status', 'Recorded by', 'Verified by', 'Verified at', 'Amount (GHS)'];
+      const esc = (x: any) => `"${String(x ?? '').replace(/"/g, '""')}"`;
+      const lines = [head.join(',')].concat(all.rows.map((p: any) => [when(p.created_at), String(p.paid_on).slice(0, 10), p.member_no, p.full_name ?? p.payer_name, HOUSE_NAME[p.house_id] ?? '', HOW[p.source] ?? p.source, p.network ?? p.channel, p.external_ref, p.receipt_no, STATUS[p.status]?.[0] ?? p.status, p.recorded_by_name, p.verified_by_name, when(p.verified_at), (p.amount_ghs / 100).toFixed(2)].map(esc).join(',')));
+      const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' })); a.download = `payments-${today()}.csv`; a.click();
+      toast(`Downloaded ${all.rows.length} payments.`);
+    } catch (e) { toast((e as Error).message, true); } finally { setBusy(false); }
   };
-  return <div className="stack">{dialog}
+  const chip = (status: string, label: string, n?: number) => <button className={'chip' + (f.status === status ? ' on' : '')} onClick={() => { setF({ ...f, status: f.status === status ? '' : status }); setPage(0); }} disabled={!n && f.status !== status}><b className="num">{n ?? 0}</b> {label}</button>;
+  return <div className="stack">
+    {d && <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}><span className="small muted">Needs attention:</span>
+      {chip('pending', 'waiting for verification', d.counts.pending)}{chip('exception', 'exceptions', d.counts.exception)}{chip('reversal_requested', 'reversals to confirm', d.counts.reversal_requested)}</div>}
     <div className="card stack">
       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
         <input aria-label="Search" placeholder="Name, number, reference or receipt" value={f.q} onChange={set('q')} style={{ maxWidth: 260 }} />
@@ -208,29 +207,72 @@ function AllPayments() {
         <select aria-label="How" value={f.source} onChange={set('source')} style={{ width: 'auto' }}><option value="">Any source</option>{Object.entries(HOW).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select>
         <label className="row small" style={{ gap: 6 }}>Paid from<input type="date" value={f.from} onChange={set('from')} style={{ width: 'auto' }} /></label>
         <label className="row small" style={{ gap: 6 }}>to<input type="date" value={f.to} onChange={set('to')} style={{ width: 'auto' }} /></label>
-        {d && <button className="btn sm" onClick={csv}>Download CSV</button>}
+        {d && <button className="btn sm" disabled={busy} onClick={csv}>{busy ? 'Preparing…' : `Download all ${d.total} as CSV`}</button>}
       </div>
-      {d && <p className="small muted" style={{ margin: 0 }}>{d.total} payment{d.total === 1 ? '' : 's'} · {ghs(d.verifiedTotal, 2)} verified in this selection</p>}
+      {d && <p className="small muted" style={{ margin: 0 }}>{d.total} payment{d.total === 1 ? '' : 's'} · {ghs(d.verifiedTotal, 2)} verified in this selection. Click a payment to see its history and options.</p>}
     </div>
     <div className="card">
       {err ? <Gate error={err}>{null}</Gate> : !d ? <p className="muted">Loading…</p> : !d.rows.length ? <p className="muted small" style={{ margin: 0 }}>No payments match.</p> :
-        <div className="tablewrap"><table><thead><tr><th>Recorded</th><th>From</th><th className="hide-sm">How · reference</th><th>Status</th><th className="hide-sm">Who</th><th className="r">Amount</th><th /></tr></thead><tbody>
-          {d.rows.map((p: any) => { const deletable = ['pending', 'exception', 'rejected'].includes(p.status) && !(p.source === 'gateway' && p.status === 'pending') && (isSuper || p.recorded_by === me?.userId);
-            return <tr key={p.id}>
-              <td style={{ whiteSpace: 'nowrap' }}>{when(p.created_at)}<div className="def">paid {date(p.paid_on)}</div></td>
-              <td>{p.full_name ? <PersonLink no={p.member_no} name={p.full_name} /> : p.payer_name ?? 'Unmatched'}<div className="def">{p.member_no ?? ''}{p.house_id ? ' · ' + HOUSE_NAME[p.house_id] : ''}{p.category === 'donor' ? ' · friend of the school' : ''}</div></td>
-              <td className="hide-sm">{HOW[p.source] ?? p.source} · {p.network ?? p.channel}<div className="def mono">{p.external_ref}{p.receipt_no ? ' · ' + p.receipt_no : ''}</div></td>
-              <td><Pill k={STATUS[p.status]?.[1] ?? ''}>{STATUS[p.status]?.[0] ?? p.status}</Pill>{(p.exception_reason || p.reversal_reason) && <div className="def">{p.exception_reason ?? p.reversal_reason}</div>}</td>
-              <td className="hide-sm small">{p.recorded_by_name ? <>Recorded by {p.recorded_by_name}</> : p.source === 'gateway' ? 'Paystack' : '—'}{p.verified_at && <div className="def">Verified {p.verified_by_name ? 'by ' + p.verified_by_name + ', ' : ''}{when(p.verified_at)}</div>}</td>
-              <td className="r num">{ghs(p.amount_ghs, 2)}</td>
-              <td><div className="row" style={{ flexWrap: 'nowrap' }}>
-                {deletable && <button className="btn sm danger" onClick={() => del(p)}>Delete</button>}
-                {p.status === 'verified' && can('fin.record') && <button className="btn sm" onClick={() => reverse(p)}>Reverse</button>}
-                {p.status === 'reversal_requested' && can('fin.verify') && <><button className="btn sm primary" onClick={async () => { try { await api.post(`/finance/payments/${p.id}/reversal-confirm`); toast('Reversal confirmed.'); reload(); } catch (e) { toast((e as Error).message, true); } }}>Confirm reversal</button>
-                  <button className="btn sm" onClick={async () => { try { await api.post(`/finance/payments/${p.id}/reversal-decline`); toast('Reversal declined.'); reload(); } catch (e) { toast((e as Error).message, true); } }}>Decline</button></>}
-              </div></td></tr>; })}
+        <div className="tablewrap"><table className="clickable"><thead><tr><th>Recorded</th><th>From</th><th className="hide-sm">How · reference</th><th>Status</th><th className="hide-sm">Who</th><th className="r">Amount</th></tr></thead><tbody>
+          {d.rows.map((p: any) => <tr key={p.id} tabIndex={0} onClick={() => setSel(p)} onKeyDown={(e) => e.key === 'Enter' && setSel(p)}>
+            <td style={{ whiteSpace: 'nowrap' }}>{when(p.created_at)}<div className="def">paid {date(p.paid_on)}</div></td>
+            <td>{p.full_name ?? p.payer_name ?? 'Unmatched'}<div className="def">{p.member_no ?? ''}{p.house_id ? ' · ' + HOUSE_NAME[p.house_id] : ''}{p.category === 'donor' ? ' · friend of the school' : ''}</div></td>
+            <td className="hide-sm">{HOW[p.source] ?? p.source} · {p.network ?? p.channel}<div className="def mono">{p.external_ref}</div></td>
+            <td><Pill k={STATUS[p.status]?.[1] ?? ''}>{STATUS[p.status]?.[0] ?? p.status}</Pill></td>
+            <td className="hide-sm small">{p.recorded_by_name ?? (p.source === 'gateway' ? 'Paystack' : '—')}{p.verified_by_name && <div className="def">verified by {p.verified_by_name}</div>}</td>
+            <td className="r num">{ghs(p.amount_ghs, 2)}</td></tr>)}
         </tbody></table></div>}
       {d && d.total > 50 && <div className="row" style={{ justifyContent: 'space-between', marginTop: 10 }}><button className="btn sm" disabled={page === 0} onClick={() => setPage(page - 1)}>Newer</button><span className="small muted">Page {page + 1} of {Math.ceil(d.total / 50)}</span><button className="btn sm" disabled={(page + 1) * 50 >= d.total} onClick={() => setPage(page + 1)}>Older</button></div>}
     </div>
+    {sel && <PaymentSheet p={sel} onClose={() => setSel(null)} onChanged={() => { setSel(null); reload(); }} />}
   </div>;
+}
+
+/** One payment: details, its full history from the audit trail, and the actions allowed for this person and status. */
+function PaymentSheet({ p, onClose, onChanged }: { p: any; onClose: () => void; onChanged: () => void }) {
+  const { can, me } = useSession(); const toast = useToast();
+  const h = useLoad<any[]>(`/finance/payments/${p.id}/history`);
+  const [mode, setMode] = useState<'' | 'edit' | 'delete' | 'reverse' | 'reject'>(''), [busy, setBusy] = useState(false), [err, setErr] = useState('');
+  const [v, setV] = useState({ memberNo: p.member_no ?? '', amountGhs: String(p.amount_ghs / 100), ref: p.external_ref, paidOn: String(p.paid_on).slice(0, 10), reason: '' });
+  const mine = p.recorded_by === me?.userId, isSuper = can('super.manage'), open = ['pending', 'exception'].includes(p.status) && p.source !== 'gateway';
+  const go = async (fn: () => Promise<unknown>, ok: string) => { setBusy(true); setErr(''); try { await fn(); toast(ok); onChanged(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); } };
+  const actions = <div className="row" style={{ flexWrap: 'wrap' }}>
+    {p.status === 'pending' && p.source !== 'gateway' && can('fin.verify') && !mine && <><button className="btn primary" disabled={busy} onClick={() => go(() => api.post(`/finance/payments/${p.id}/verify`), 'Verified and added to the totals.')}>Verify</button><button className="btn" onClick={() => setMode('reject')}>Reject</button></>}
+    {open && (isSuper || mine) && <button className="btn" onClick={() => setMode('edit')}>Correct details</button>}
+    {(open || p.status === 'rejected') && (isSuper || mine) && <button className="btn danger" onClick={() => setMode('delete')}>Delete</button>}
+    {p.status === 'verified' && can('fin.record') && <button className="btn" onClick={() => setMode('reverse')}>Reverse</button>}
+    {p.status === 'reversal_requested' && can('fin.verify') && <><button className="btn primary" disabled={busy} onClick={() => go(() => api.post(`/finance/payments/${p.id}/reversal-confirm`), 'Reversal confirmed.')}>Confirm reversal</button><button className="btn" disabled={busy} onClick={() => go(() => api.post(`/finance/payments/${p.id}/reversal-decline`), 'Reversal declined.')}>Decline reversal</button></>}
+  </div>;
+  return <div className="sheet-bg" onClick={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="sheet stack" role="dialog" aria-modal="true" aria-label="Payment details" style={{ maxWidth: 640 }}>
+      <div className="row between"><div><h2 style={{ margin: 0 }}>{ghs(p.amount_ghs, 2)}</h2><div className="small muted">{p.full_name ?? p.payer_name ?? 'Unmatched payer'}{p.member_no ? ' · ' + p.member_no : ''}</div></div><button className="btn sm" onClick={onClose}>Close</button></div>
+      <dl className="kv">
+        <dt>Status</dt><dd><Pill k={STATUS[p.status]?.[1] ?? ''}>{STATUS[p.status]?.[0] ?? p.status}</Pill></dd>
+        <dt>Paid on</dt><dd>{date(p.paid_on)}</dd><dt>Recorded</dt><dd>{when(p.created_at)}{p.recorded_by_name ? ' by ' + p.recorded_by_name : p.source === 'gateway' ? ' by Paystack' : ''}</dd>
+        {p.verified_at && <><dt>Verified</dt><dd>{when(p.verified_at)}{p.verified_by_name ? ' by ' + p.verified_by_name : ' automatically'}</dd></>}
+        <dt>How</dt><dd>{HOW[p.source] ?? p.source} · {p.network ?? p.channel}</dd><dt>Reference</dt><dd className="mono">{p.external_ref}</dd>
+        {p.receipt_no && <><dt>Receipt</dt><dd className="mono">{p.receipt_no}</dd></>}
+        {(p.exception_reason || p.reversal_reason || p.evidence_note) && <><dt>Note</dt><dd>{p.exception_reason ?? p.reversal_reason ?? p.evidence_note}</dd></>}
+      </dl>
+      {!mode && actions}
+      {mode === 'edit' && <div className="stack" style={{ gap: 10 }}><b>Correct this payment</b>
+        <div className="fgrid">
+          <label className="f">Classmate<MemberPicker value={v.memberNo} onChange={(no) => setV((x) => ({ ...x, memberNo: no }))} /></label>
+          <label className="f">Amount (GH₵)<input type="number" value={v.amountGhs} onChange={(e) => setV({ ...v, amountGhs: e.target.value })} /></label>
+          <label className="f">Reference<input value={v.ref} onChange={(e) => setV({ ...v, ref: e.target.value })} /></label>
+          <label className="f">Date paid<input type="date" value={v.paidOn} onChange={(e) => setV({ ...v, paidOn: e.target.value })} /></label>
+          <label className="f" style={{ gridColumn: '1 / -1' }}>What did you correct, and why?<input value={v.reason} onChange={(e) => setV({ ...v, reason: e.target.value })} /></label>
+        </div>
+        <div className="row"><button className="btn primary" disabled={busy} onClick={() => go(() => api.post(`/finance/payments/${p.id}/edit`, { memberNo: v.memberNo || undefined, amountGhs: Number(v.amountGhs), ref: v.ref, paidOn: v.paidOn, reason: v.reason }), 'Payment corrected.')}>Save correction</button><button className="btn" onClick={() => setMode('')}>Cancel</button></div></div>}
+      {(mode === 'delete' || mode === 'reverse' || mode === 'reject') && <div className="stack" style={{ gap: 10 }}>
+        <div className="callout warn small">{mode === 'delete' ? 'This payment was never verified, so it is not in any totals. Deleting removes it; the audit trail keeps a record of what was deleted and why.' : mode === 'reverse' ? 'This payment is verified and counted. A reversal takes it back out of the totals with a clear record, once a different super admin confirms.' : 'Rejecting tells the classmate we could not confirm this payment, with your reason.'}</div>
+        <label className="f">Reason<input autoFocus value={v.reason} onChange={(e) => setV({ ...v, reason: e.target.value })} placeholder={mode === 'delete' ? 'e.g. duplicate entry' : mode === 'reject' ? 'e.g. not on the bank statement' : 'e.g. bank returned the transfer'} /></label>
+        <div className="row"><button className={'btn ' + (mode === 'delete' ? 'danger' : 'primary')} disabled={busy} onClick={() => go(() => mode === 'delete' ? api.post(`/finance/payments/${p.id}/delete`, { reason: v.reason }) : mode === 'reverse' ? api.post(`/finance/payments/${p.id}/reversal-request`, { reason: v.reason }) : api.post(`/finance/payments/${p.id}/reject`, { reason: v.reason }),
+          mode === 'delete' ? 'Payment deleted.' : mode === 'reverse' ? 'Reversal requested. A super admin will confirm it.' : 'Payment rejected.')}>{mode === 'delete' ? 'Delete payment' : mode === 'reverse' ? 'Request reversal' : 'Reject payment'}</button><button className="btn" onClick={() => setMode('')}>Cancel</button></div></div>}
+      {err && <div className="callout bad">{err}</div>}
+      <div><h3 style={{ marginBottom: 6 }}>History</h3>
+        {!h.data ? <p className="muted small">Loading…</p> : !h.data.length ? <p className="muted small" style={{ margin: 0 }}>{p.source === 'gateway' ? 'Created and confirmed by Paystack.' : 'No recorded steps.'}</p> :
+          <ol className="timeline">{h.data.map((x: any, i: number) => <li key={i}><span className="t">{when(x.at)}</span><b>{x.action}</b><span className="small muted"> · {x.actor_label.replace(/ \(.*\)$/, '')}</span>{x.detail && <div className="small">{x.detail}</div>}</li>)}</ol>}
+      </div>
+    </div></div>;
 }
