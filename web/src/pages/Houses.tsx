@@ -95,7 +95,7 @@ export default function Houses() {
         <span className="nm"><House id={h.id} /></span><Bar v={h.raised / maxRaised} color={HOUSE_COLOR[h.id]} /><b className="num">{ghs(h.raised)}</b><span className="muted small num">{h.contributors}/{h.members}</span></button>)}
       {admin && <label className="f" style={{ maxWidth: 420 }}>Who can see what each classmate gave
         <select value={ov.data.amountsVisibleTo} onChange={(e) => act(() => api.post('/houses/amounts', { visibleTo: e.target.value }), 'Saved.', refresh)}>
-          <option value="finance">Finance team only (treasurer, committee, approvers, auditor)</option><option value="members">Every signed-in classmate</option></select>
+          <option value="members">Every signed-in classmate (fully transparent)</option><option value="finance">Finance team only (treasurer, committee, approvers, auditor)</option></select>
         <span className="def">Everyone always sees house totals and who has given. Each classmate always sees their own amount.</span></label>}
     </div>
 
@@ -111,7 +111,7 @@ export default function Houses() {
     </div>
 
     {can('house.tools') && out.data?.notYet && <div className="card"><div className="card-h"><h2>Captain’s tools · <House id={out.data.houseId} /></h2><span className="pill warn">{out.data.notYet.length} yet to contribute</span></div>
-      <p className="muted small" style={{ marginBottom: 10 }}>Names only. You cannot see amounts, edit payments or change rankings.</p>
+      <p className="muted small" style={{ marginBottom: 10 }}>You cannot edit payments or change rankings.</p>
       <button className="btn primary" onClick={() => act(() => api.post('/captain/remind'), 'Reminder queued by in-app message and SMS.')}>Send a friendly reminder</button>
       <div className="tablewrap" style={{ maxHeight: 280, overflowY: 'auto', marginTop: 10 }}><table><thead><tr><th>Member</th><th>No.</th><th>City</th></tr></thead><tbody>{out.data.notYet.map((m: any) => <tr key={m.member_no}><td>{m.full_name}</td><td className="mono">{m.member_no}</td><td>{m.city}</td></tr>)}</tbody></table></div></div>}
     {dialog}

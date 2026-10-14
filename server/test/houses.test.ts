@@ -55,6 +55,8 @@ describe('houses page', () => {
     await pool.query(`UPDATE users SET password_hash=(SELECT password_hash FROM users WHERE email='admin@example.org') WHERE email='kofi@example.org'`);
     const kt = (await app.inject({ method: 'POST', url: '/api/auth/login', payload: { email: 'kofi@example.org', password: 'a-long-enough-pass' } })).json().token;
     const K = { authorization: 'Bearer ' + kt, ...csrf };
+    expect((await get('/api/houses/H3/members', K)).json().rows.find((r: any) => r.member_no === 'P03-0001').given).toBe(100000);  // transparent by default
+    await post('/api/houses/amounts', { visibleTo: 'finance' });
     let rows = (await get('/api/houses/H3/members', K)).json().rows;
     expect(rows.find((r: any) => r.member_no === 'P03-0002')).toMatchObject({ given: 75000, payments: 2, contributed: true });   // own amount
     expect(rows.find((r: any) => r.member_no === 'P03-0001')).toMatchObject({ given: null, contributed: true });                 // hidden

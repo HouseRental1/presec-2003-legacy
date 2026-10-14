@@ -98,7 +98,7 @@ void one;
 /** Who may see individual amounts on the Houses page: 'finance' (finance roles only) or 'members' (every signed-in classmate). */
 export async function amountsVisibility(db: Db | any): Promise<'finance' | 'members'> {
   const [r] = await q<any>(db, `SELECT value FROM settings WHERE key='house_amounts'`);
-  return r?.value === 'members' ? 'members' : 'finance';
+  return r?.value === 'finance' ? 'finance' : 'members';   // default: fully transparent within the year group
 }
 const seesAmounts = async (db: Db | any, actor: Actor) => perms(actor).has('fin.view') || (await amountsVisibility(db)) === 'members';
 
